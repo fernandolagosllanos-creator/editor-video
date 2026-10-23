@@ -2,6 +2,8 @@ import Foundation
 import AVFoundation
 import CoreMedia
 import QuartzCore
+import CoreText
+import CoreGraphics
 
 struct BuiltComposition {
     let composition: AVComposition

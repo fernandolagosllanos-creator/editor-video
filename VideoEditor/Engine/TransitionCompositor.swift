@@ -12,7 +12,7 @@ struct ClipLayout {
 
 /// Instrucción de composición: un clip en primer plano, opcionalmente otro de fondo con el que
 /// se hace la transición, y el filtro de color global.
-final class TransitionInstruction: NSObject, AVVideoCompositionInstructionProtocol {
+final class TransitionInstruction: NSObject, AVVideoCompositionInstructionProtocol, @unchecked Sendable {
     let timeRange: CMTimeRange
     let enablePostProcessing: Bool = false
     let containsTweening: Bool = true
@@ -49,11 +49,13 @@ final class TransitionCompositor: NSObject, AVVideoCompositing {
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
 
     let sourcePixelBufferAttributes: [String: any Sendable]? = [
-        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+        kCVPixelBufferIOSurfacePropertiesKey as String: [String: String]()
     ]
 
     let requiredPixelBufferAttributesForRenderContext: [String: any Sendable] = [
-        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+        kCVPixelBufferIOSurfacePropertiesKey as String: [String: String]()
     ]
 
     func renderContextChanged(_ newRenderContext: AVVideoCompositionRenderContext) {}
