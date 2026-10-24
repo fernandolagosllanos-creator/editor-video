@@ -10,18 +10,23 @@ struct ProjectsView: View {
     @State private var newName = ""
     @State private var deleting: ProjectSummary?
 
+    /// Los proyectos de carpetas privadas cerradas no se muestran aquí.
+    private var visibleProjects: [ProjectSummary] {
+        store.projects.filter { !FolderStore.shared.isHidden($0.id) }
+    }
+
     var body: some View {
         StudioSheet(title: "Mis proyectos", symbol: "square.grid.2x2.fill",
                     subtitle: "Se guardan solos en este dispositivo") {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 14)], spacing: 16) {
                 newProjectCard
-                ForEach(store.projects) { p in
+                ForEach(visibleProjects) { p in
                     ProjectCard(project: p, isCurrent: p.id == model.projectID)
                         .onTapGesture { open(p) }
                         .contextMenu { menu(for: p) }
                 }
             }
-            if store.projects.isEmpty {
+            if visibleProjects.isEmpty {
                 Text("Aún no hay proyectos guardados. En cuanto agregues un video, el proyecto se guarda automáticamente.")
                     .font(.footnote).foregroundStyle(.secondary)
             } else {
