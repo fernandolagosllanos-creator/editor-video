@@ -255,7 +255,9 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Editor de Video";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Para grabar la voz en off de tus videos.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Para guardar los videos exportados en tu biblioteca de Fotos.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Para crear subtítulos automáticos a partir de la voz de tus videos.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Para importar videos desde tu biblioteca de Fotos.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -298,7 +300,9 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Editor de Video";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Para grabar la voz en off de tus videos.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Para guardar los videos exportados en tu biblioteca de Fotos.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Para crear subtítulos automáticos a partir de la voz de tus videos.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Para importar videos desde tu biblioteca de Fotos.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;

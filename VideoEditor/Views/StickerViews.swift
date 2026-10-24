@@ -295,11 +295,11 @@ struct StickerPickerSheet: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    Spacer()
-                    FXSegmented(options: [(true, "Relleno", "circle.fill"), (false, "Borde", "circle")],
-                                selection: $filled)
-                        .frame(maxWidth: 220)
                 }
+                // En una fila aparte para que quepa en la pantalla del iPhone.
+                FXSegmented(options: [(true, "Relleno", "circle.fill"), (false, "Borde", "circle")],
+                            selection: $filled)
+                    .frame(maxWidth: 260)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 12)], spacing: 12) {
                     ForEach(StickerShape.allCases) { shape in
                         cell { add(.shape(shape)) } label: {
@@ -435,11 +435,11 @@ struct StickerSheet: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    Spacer()
-                    FXSegmented(options: [(true, "Relleno", "circle.fill"), (false, "Borde", "circle")],
-                                selection: $draft.filled)
-                        .frame(maxWidth: 220)
                 }
+                // En una fila aparte para que quepa en la pantalla del iPhone.
+                FXSegmented(options: [(true, "Relleno", "circle.fill"), (false, "Borde", "circle")],
+                            selection: $draft.filled)
+                    .frame(maxWidth: 260)
             }
 
             FXCard {

@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import CoreImage
+import CoreImage.CIFilterBuiltins
 import CoreVideo
 
 /// Cómo dibujar una pista: tamaño natural y rotación del archivo original, más el color y el
@@ -179,6 +180,25 @@ final class TransitionCompositor: NSObject, AVVideoCompositing {
         case .wipe:
             let reveal = CGRect(x: 0, y: 0, width: w * p, height: renderRect.height)
             return fg.cropped(to: reveal).composited(over: bg)
+        case .slideUp:
+            // Core Image tiene la Y hacia arriba: "abajo" es la Y negativa.
+            let h = renderRect.height
+            let fgMoved = fg.transformed(by: CGAffineTransform(translationX: 0, y: -(1 - p) * h))
+            let bgMoved = bg.transformed(by: CGAffineTransform(translationX: 0, y: p * h))
+            return fgMoved.composited(over: bgMoved.composited(over: black))
+        case .iris:
+            let radius = hypot(renderRect.width, renderRect.height) / 2 * p
+            let mask = CIFilter.radialGradient()
+            mask.center = center
+            mask.radius0 = Float(max(0, radius - 1.5))
+            mask.radius1 = Float(radius + 1.5)
+            mask.color0 = CIColor.white
+            mask.color1 = CIColor.black
+            let blend = CIFilter.blendWithMask()
+            blend.inputImage = fg
+            blend.backgroundImage = bg
+            blend.maskImage = mask.outputImage?.cropped(to: renderRect)
+            return blend.outputImage?.cropped(to: renderRect) ?? fg
         }
     }
 }

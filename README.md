@@ -19,6 +19,10 @@ compila para **macOS 14+** y **iOS 17+** (iPhone y iPad).
 | Congelar fotograma | Coloca el cabezal y pulsa **Congelar** (o desde Velocidad, eligiendo 1, 2, 3 o 5 s): la imagen se detiene en ese cuadro. |
 | Stickers | **Stickers** → emojis y formas (corazón, estrella, flecha, globo, rayo…) con color y animación (aparecer, rebote, latido, balanceo, girar, flotar). Arrástralos sobre la vista previa; en iPhone pellizca para cambiar el tamaño y gira con dos dedos. Doble toque para editarlos. |
 | Formato | **Formato** → relación de aspecto 9:16, 1:1, 4:5, 16:9, 4:3 u original; encuadre del clip (ajustar o llenar, zoom, mover, espejo) y fondo desenfocado o de color. |
+| Música de fondo | **Audio** → agrega una canción desde Archivos o saca el audio de un video. Cada pista tiene volumen, punto de inicio, parte de la canción, fundido de entrada y salida, **Repetir hasta el final** y **Bajar con la voz** (la música baja sola mientras suena una voz en off). |
+| Voz en off | **Voz** → toca el botón rojo (con cuenta 3‑2‑1 opcional). El video avanza en silencio mientras hablas y la grabación queda en la línea de tiempo donde empezaste. |
+| Subtítulos automáticos | **Subtítulos** → elige el idioma, el estilo (Clásico, Caja, Amarillo, Grande, Mínimo) y la posición → **Generar**. Usa el reconocimiento de voz de Apple: gratis y, si el idioma está descargado en el equipo, sin internet. Toca un subtítulo en la línea de tiempo para corregirlo. |
+| Proyectos | Se guardan solos tras cada cambio. La pantalla de inicio muestra la galería: abrir, nuevo, renombrar, duplicar y borrar (mantén presionado o clic derecho). La flecha **‹** del editor vuelve al inicio. Todo queda en el dispositivo, sin costo. |
 | Exportar | **Exportar** → formato **MP4 o MOV**, códec **H.264 o HEVC (H.265)**, resolución **original / 480p / 720p / 1080p / 4K** y calidad **alta / media / baja**. En iPhone se guarda en Fotos; en Mac con "Guardar como…". En ambos se puede **Compartir**. |
 
 La vista previa reproduce exactamente lo que se va a exportar (transiciones, color, velocidad,
@@ -76,12 +80,18 @@ VideoEditor/
 ├── VideoEditorApp.swift          Punto de entrada
 ├── Models/
 │   ├── Models.swift              Clip, texto, pista de audio, transiciones, filtros, línea de tiempo
-│   └── EditorModel.swift         Estado del editor y todas las operaciones (dividir, recortar, etc.)
+│   ├── Project.swift             Formato del proyecto guardado (Codable)
+│   ├── EditorModel.swift         Estado del editor y todas las operaciones (dividir, recortar, etc.)
+│   ├── EditorModel+Project.swift Guardado automático, abrir y crear proyectos
+│   └── EditorModel+Captions.swift Estilos y posición de los subtítulos
 ├── Engine/
 │   ├── CompositionBuilder.swift  Arma la AVComposition, instrucciones de video, mezcla de audio y textos
 │   ├── TransitionCompositor.swift Compositor personalizado (rotación, transiciones, filtros con Core Image)
 │   ├── Exporter.swift            Opciones de exportación y AVAssetExportSession
-│   └── MediaStore.swift          Copia de archivos importados, miniaturas, soporte para PhotosPicker
+│   ├── MediaStore.swift          Copia de archivos importados, miniaturas, soporte para PhotosPicker
+│   ├── ProjectStore.swift        Proyectos en disco y galería
+│   ├── VoiceRecorder.swift       Grabación con el micrófono
+│   └── CaptionGenerator.swift    Subtítulos con el framework Speech
 └── Views/
     ├── EditorView.swift          Pantalla principal, barra de herramientas, importación
     ├── PreviewView.swift         Reproductor y textos arrastrables
@@ -90,7 +100,7 @@ VideoEditor/
 ```
 
 ## Próximos pasos posibles
-- Guardar y reabrir proyectos.
+- Sincronizar proyectos entre Mac e iPhone con iCloud (requiere el programa de desarrolladores de pago de Apple, 99 USD/año).
 - Velocidad (cámara lenta / rápida) y volumen por clip.
 - Stickers, fuentes adicionales y animaciones de texto.
 - Recorte de encuadre (crop) y relación de aspecto 9:16 / 1:1 para redes.

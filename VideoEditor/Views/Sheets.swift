@@ -39,49 +39,7 @@ struct TrimSheet: View {
     }
 }
 
-// MARK: - Transición
-
-struct TransitionSheet: View {
-    @Bindable var model: EditorModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var type: TransitionType = .crossfade
-    @State private var seconds: Double = 0.6
-
-    var body: some View {
-        SheetContainer(title: "Transición al siguiente clip") {
-            VStack(alignment: .leading, spacing: 18) {
-                Picker("Tipo", selection: $type) {
-                    ForEach(TransitionType.allCases) { t in
-                        Label(t.label, systemImage: t.symbol).tag(t)
-                    }
-                }
-                #if os(iOS)
-                .pickerStyle(.navigationLink)
-                #endif
-                LabeledContent("Duración", value: String(format: "%.1f s", seconds))
-                Slider(value: $seconds, in: 0.2...2.0, step: 0.1)
-                    .disabled(type == .none)
-                if model.selectedClipIndex == (model.clips.count - 1) {
-                    Text("Este es el último clip: la transición se aplicará cuando agregues otro después.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-            }
-        } actions: {
-            Button("Cancelar") { dismiss() }
-            Button("Aplicar") {
-                model.setTransition(type, duration: seconds)
-                dismiss()
-            }
-            .keyboardShortcut(.defaultAction)
-        }
-        .onAppear {
-            if let clip = model.selectedClip {
-                type = clip.transitionOut == .none ? .crossfade : clip.transitionOut
-                seconds = clip.transitionDuration
-            }
-        }
-    }
-}
+// La hoja de transiciones está en TransitionSheet.swift.
 
 // MARK: - Texto
 
@@ -151,106 +109,13 @@ struct TextSheet: View {
 }
 
 // MARK: - Audio
-
-struct AudioSheet: View {
-    @Bindable var model: EditorModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var showImporter = false
-    @State private var originalVolume: Float = 1
-
-    var body: some View {
-        SheetContainer(title: "Audio") {
-            VStack(alignment: .leading, spacing: 18) {
-                GroupBox("Audio original del video") {
-                    VStack(alignment: .leading) {
-                        Toggle("Silenciar", isOn: Binding(
-                            get: { originalVolume == 0 },
-                            set: { originalVolume = $0 ? 0 : 1; model.setOriginalVolume(originalVolume) }
-                        ))
-                        HStack {
-                            Image(systemName: "speaker.wave.2")
-                            Slider(value: $originalVolume, in: 0...1) { editing in
-                                if !editing { model.setOriginalVolume(originalVolume) }
-                            }
-                        }
-                    }
-                }
-
-                GroupBox("Pistas agregadas") {
-                    if model.audioTracks.isEmpty {
-                        Text("Sin pistas. Agrega música o una voz en off desde un archivo.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    ForEach(model.audioTracks) { track in
-                        AudioTrackRow(model: model, track: track)
-                        Divider()
-                    }
-                    Button {
-                        showImporter = true
-                    } label: {
-                        Label("Agregar audio desde archivo…", systemImage: "plus")
-                    }
-                }
-            }
-        } actions: {
-            Spacer()
-            Button("Listo") { dismiss() }.keyboardShortcut(.defaultAction)
-        }
-        .onAppear { originalVolume = model.originalVolume }
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.audio, .mp3, .mpeg4Audio, .wav, .aiff, .movie],
-                      allowsMultipleSelection: false) { result in
-            if case .success(let urls) = result, let url = urls.first {
-                Task {
-                    do {
-                        let copy = try MediaStore.importCopy(from: url)
-                        await model.addAudio(from: copy)
-                    } catch {
-                        model.errorMessage = error.localizedDescription
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct AudioTrackRow: View {
-    @Bindable var model: EditorModel
-    @State var track: AudioTrack
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(track.name).font(.subheadline).lineLimit(1)
-                Spacer()
-                Button(role: .destructive) { model.removeAudio(id: track.id) } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.borderless)
-            }
-            HStack {
-                Text("Empieza en \(formatTime(track.start))").font(.caption).frame(width: 130, alignment: .leading)
-                Slider(value: $track.start, in: 0...max(0.1, model.duration)) { editing in
-                    if !editing { model.update(track) }
-                }
-            }
-            HStack {
-                Image(systemName: "speaker.wave.2").font(.caption).frame(width: 130, alignment: .leading)
-                Slider(value: $track.volume, in: 0...1) { editing in
-                    if !editing { model.update(track) }
-                }
-            }
-        }
-        .padding(.vertical, 4)
-    }
-}
+// La hoja de audio está en AudioSheet.swift.
 
 // MARK: - Exportar
 
 struct ExportSheet: View {
     @Bindable var model: EditorModel
     @Environment(\.dismiss) private var dismiss
-    @State private var savedMessage: String?
 
     private var originalSize: CGSize { model.canvasSize }
 
@@ -263,31 +128,7 @@ struct ExportSheet: View {
                         ProgressView(value: model.exportProgress)
                     }
                 } else if let url = model.exportedURL {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("Video exportado", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                        Text(url.lastPathComponent).font(.footnote).foregroundStyle(.secondary)
-                        HStack {
-                            #if os(iOS)
-                            Button {
-                                Task {
-                                    do {
-                                        try await Exporter.saveToPhotos(url)
-                                        savedMessage = "Guardado en Fotos."
-                                    } catch {
-                                        model.errorMessage = error.localizedDescription
-                                    }
-                                }
-                            } label: { Label("Guardar en Fotos", systemImage: "photo.on.rectangle") }
-                            #else
-                            Button {
-                                saveOnMac(url)
-                            } label: { Label("Guardar como…", systemImage: "square.and.arrow.down") }
-                            #endif
-                            ShareLink(item: url) { Label("Compartir", systemImage: "square.and.arrow.up") }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        if let savedMessage { Text(savedMessage).font(.footnote).foregroundStyle(.secondary) }
-                    }
+                    ShareResultView(model: model, url: url)
                 } else {
                     Picker("Formato", selection: $model.exportSettings.container) {
                         ForEach(ExportContainer.allCases) { Text($0.label).tag($0) }
@@ -317,7 +158,7 @@ struct ExportSheet: View {
             if model.isExporting {
                 ProgressView().controlSize(.small)
             } else if model.exportedURL != nil {
-                Button("Exportar otro") { model.exportedURL = nil; savedMessage = nil }
+                Button("Exportar otro") { model.exportedURL = nil }
                 Button("Cerrar") { dismiss() }.keyboardShortcut(.defaultAction)
             } else {
                 Button("Cancelar") { dismiss() }
@@ -326,23 +167,6 @@ struct ExportSheet: View {
         }
         .interactiveDismissDisabled(model.isExporting)
     }
-
-    #if os(macOS)
-    private func saveOnMac(_ url: URL) {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "video." + url.pathExtension
-        panel.canCreateDirectories = true
-        if panel.runModal() == .OK, let dest = panel.url {
-            do {
-                try? FileManager.default.removeItem(at: dest)
-                try FileManager.default.copyItem(at: url, to: dest)
-                savedMessage = "Guardado en \(dest.path)"
-            } catch {
-                model.errorMessage = error.localizedDescription
-            }
-        }
-    }
-    #endif
 }
 
 // MARK: - Contenedor común de hojas
