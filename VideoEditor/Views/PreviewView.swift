@@ -27,6 +27,7 @@ struct PreviewView: View {
                                 model.selectedTextID = text.id
                             }
                         }
+                        StickerCanvas(model: model, size: geo.size)
                     }
                 }
                 .aspectRatio(model.renderAspect, contentMode: .fit)

@@ -60,4 +60,17 @@ enum Thumbnails {
         }
         return images
     }
+
+    /// Un cuadro exacto del clip (ya orientado), `local` segundos después de su inicio en la línea
+    /// de tiempo. Se usa para congelar fotogramas y para las vistas previas de los efectos.
+    static func frame(of clip: Clip, atLocal local: Double, maxSide: CGFloat?) async throws -> CGImage {
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: clip.url))
+        generator.appliesPreferredTrackTransform = true
+        if let maxSide { generator.maximumSize = CGSize(width: maxSide, height: maxSide) }
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        let seconds = min(clip.sourceSeconds(atLocal: local), max(0, clip.assetDuration.seconds - 0.05))
+        let time = CMTime(seconds: seconds, preferredTimescale: 600)
+        return try await generator.image(at: time).image
+    }
 }

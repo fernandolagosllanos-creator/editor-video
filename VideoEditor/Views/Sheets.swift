@@ -245,40 +245,6 @@ private struct AudioTrackRow: View {
     }
 }
 
-// MARK: - Filtro
-
-struct FilterSheet: View {
-    @Bindable var model: EditorModel
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        SheetContainer(title: "Filtro de color") {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(VideoFilter.allCases) { f in
-                    Button {
-                        model.setFilter(f)
-                    } label: {
-                        HStack {
-                            Text(f.label)
-                            Spacer()
-                            if model.filter == f { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.vertical, 6)
-                    Divider()
-                }
-                Text("El filtro se aplica a todo el video y se ve en la vista previa.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-        } actions: {
-            Spacer()
-            Button("Listo") { dismiss() }.keyboardShortcut(.defaultAction)
-        }
-    }
-}
-
 // MARK: - Exportar
 
 struct ExportSheet: View {
@@ -286,7 +252,7 @@ struct ExportSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var savedMessage: String?
 
-    private var originalSize: CGSize { CompositionBuilder.renderSize(for: model.clips) }
+    private var originalSize: CGSize { model.canvasSize }
 
     var body: some View {
         SheetContainer(title: "Exportar video") {
