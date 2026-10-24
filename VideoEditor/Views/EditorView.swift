@@ -3,20 +3,25 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 enum ActiveSheet: Identifiable {
-    case trim, transition, audio, filter, export
+    case trim, transition, audio, color, speed, canvas, stickers, export
     case voiceOver, captions
     case text(TextOverlay)
+    case sticker(StickerOverlay)
 
     var id: String {
         switch self {
         case .trim: return "trim"
         case .transition: return "transition"
         case .audio: return "audio"
-        case .filter: return "filter"
+        case .color: return "color"
+        case .speed: return "speed"
+        case .canvas: return "canvas"
+        case .stickers: return "stickers"
         case .export: return "export"
         case .voiceOver: return "voiceOver"
         case .captions: return "captions"
         case .text(let t): return "text-\(t.id)"
+        case .sticker(let s): return "sticker-\(s.id)"
         }
     }
 }
@@ -70,7 +75,11 @@ struct EditorView: View {
                 case .trim: TrimSheet(model: model)
                 case .transition: TransitionSheet(model: model)
                 case .audio: AudioSheet(model: model)
-                case .filter: FilterSheet(model: model)
+                case .color: ColorSheet(model: model)
+                case .speed: SpeedSheet(model: model)
+                case .canvas: CanvasSheet(model: model)
+                case .stickers: StickerPickerSheet(model: model)
+                case .sticker(let s): StickerSheet(model: model, sticker: s)
                 case .export: ExportSheet(model: model)
                 case .voiceOver: VoiceOverSheet(model: model)
                 case .captions: CaptionsSheet(model: model)
@@ -93,8 +102,12 @@ struct EditorView: View {
                 ZStack {
                     Color.black.opacity(0.45)
                     VStack(spacing: 12) {
-                        ProgressView().controlSize(.large).tint(.white)
-                        Text("Cargando…").font(.system(.headline, design: .rounded))
+                        if let p = model.busyProgress {
+                            ProgressView(value: p).tint(Theme.accent2).frame(width: 200)
+                        } else {
+                            ProgressView().controlSize(.large).tint(.white)
+                        }
+                        Text(model.busyMessage).font(.system(.headline, design: .rounded))
                     }
                     .padding(26)
                     .glassCard(cornerRadius: 22)
@@ -104,6 +117,11 @@ struct EditorView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: model.isBusy)
+        .onChange(of: model.editingStickerID) { _, id in
+            guard let id, let s = model.stickers.first(where: { $0.id == id }) else { return }
+            model.editingStickerID = nil
+            sheet = .sticker(s)
+        }
         .alert("Nombre del proyecto", isPresented: $isRenaming) {
             TextField("Nombre", text: $newName)
             Button("Cancelar", role: .cancel) {}
@@ -263,13 +281,18 @@ struct EditorView: View {
                 let t = model.addText()
                 sheet = .text(t)
             },
+            ToolItem("Stickers", "face.smiling", isEnabled: hasClips) { sheet = .stickers },
             ToolItem("Audio", "music.note", isEnabled: hasClips) { sheet = .audio },
             ToolItem("Voz", "mic.fill", isEnabled: hasClips) { sheet = .voiceOver },
             ToolItem("Subtítulos", "captions.bubble", isEnabled: hasClips) { sheet = .captions },
+            ToolItem("Filtros", "camera.filters", isEnabled: hasClips) {
+                if selectClipUnderPlayhead() { sheet = .color }
+            },
             ToolItem("Efectos", "sparkles", isEnabled: hasClips) {
                 if selectClipUnderPlayhead() { sheet = .transition }
             },
-            ToolItem("Filtros", "camera.filters", isEnabled: hasClips) { sheet = .filter },
+            ToolItem("Formato", "aspectratio", isEnabled: hasClips) { sheet = .canvas },
+            ToolItem("Congelar", "snowflake", isEnabled: hasClips) { Task { await model.freezeFrame() } },
         ]
     }
 
@@ -278,7 +301,10 @@ struct EditorView: View {
         return [
             ToolItem("Dividir", "scissors") { model.splitAtPlayhead() },
             ToolItem("Recortar", "crop") { sheet = .trim },
+            ToolItem("Velocidad", "speedometer") { sheet = .speed },
+            ToolItem("Color", "camera.filters") { sheet = .color },
             ToolItem("Transición", "square.on.square.dashed") { sheet = .transition },
+            ToolItem("Congelar", "snowflake") { Task { await model.freezeFrame() } },
             ToolItem("Duplicar", "plus.square.on.square") { model.duplicateSelectedClip() },
             ToolItem("Mover ←", "arrow.left", isEnabled: index > 0) { model.moveSelectedClip(by: -1) },
             ToolItem("Mover →", "arrow.right", isEnabled: index < model.clips.count - 1) { model.moveSelectedClip(by: 1) },

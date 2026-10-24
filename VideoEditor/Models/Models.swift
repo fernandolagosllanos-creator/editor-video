@@ -39,7 +39,7 @@ enum TransitionType: String, CaseIterable, Identifiable, Codable {
 // MARK: - Filtros de color
 
 enum VideoFilter: String, CaseIterable, Identifiable, Codable {
-    case none, mono, noir, sepia, vivid, warm, cool, fade, chrome, instant
+    case none, vivid, warm, cool, cinema, golden, dramatic, vintage, fade, chrome, instant, mono, noir, sepia
 
     var id: String { rawValue }
 
@@ -55,6 +55,10 @@ enum VideoFilter: String, CaseIterable, Identifiable, Codable {
         case .fade: return "Desvanecido"
         case .chrome: return "Chrome"
         case .instant: return "Instantánea"
+        case .cinema: return "Cine"
+        case .golden: return "Dorado"
+        case .dramatic: return "Dramático"
+        case .vintage: return "Vintage"
         }
     }
 
@@ -92,6 +96,36 @@ enum VideoFilter: String, CaseIterable, Identifiable, Codable {
         case .instant:
             let f = CIFilter.photoEffectInstant(); f.inputImage = image
             return f.outputImage ?? image
+        case .cinema:
+            // Contraste suave, colores contenidos, sombras frías y luces cálidas.
+            let c = CIFilter.colorControls(); c.inputImage = image
+            c.saturation = 0.85; c.contrast = 1.12; c.brightness = -0.02
+            let m = CIFilter.colorMatrix(); m.inputImage = c.outputImage ?? image
+            m.rVector = CIVector(x: 1.06, y: 0, z: 0, w: 0)
+            m.gVector = CIVector(x: 0, y: 1.0, z: 0, w: 0)
+            m.bVector = CIVector(x: 0, y: 0, z: 0.94, w: 0)
+            m.biasVector = CIVector(x: -0.02, y: 0.01, z: 0.04, w: 0)
+            let v = CIFilter.vignette(); v.inputImage = m.outputImage ?? image
+            v.intensity = 0.6; v.radius = 1.6
+            return v.outputImage ?? image
+        case .golden:
+            let c = CIFilter.colorControls(); c.inputImage = image
+            c.saturation = 1.15; c.contrast = 1.04; c.brightness = 0.02
+            let m = CIFilter.colorMatrix(); m.inputImage = c.outputImage ?? image
+            m.rVector = CIVector(x: 1.12, y: 0, z: 0, w: 0)
+            m.gVector = CIVector(x: 0, y: 1.04, z: 0, w: 0)
+            m.bVector = CIVector(x: 0, y: 0, z: 0.82, w: 0)
+            return m.outputImage ?? image
+        case .dramatic:
+            let c = CIFilter.colorControls(); c.inputImage = image
+            c.saturation = 0.75; c.contrast = 1.35; c.brightness = -0.03
+            let v = CIFilter.vignette(); v.inputImage = c.outputImage ?? image
+            v.intensity = 1.0; v.radius = 1.4
+            return v.outputImage ?? image
+        case .vintage:
+            let f = CIFilter.photoEffectTransfer(); f.inputImage = image
+            let s = CIFilter.sepiaTone(); s.inputImage = f.outputImage ?? image; s.intensity = 0.25
+            return s.outputImage ?? image
         }
     }
 }
@@ -139,9 +173,9 @@ enum TextColor: String, CaseIterable, Identifiable, Codable {
 // MARK: - Clip de video
 
 struct Clip: Identifiable {
-    let id: UUID
+    var id: UUID
     let url: URL
-    let name: String
+    var name: String
     let assetDuration: CMTime
     let naturalSize: CGSize
     let preferredTransform: CGAffineTransform
@@ -155,7 +189,51 @@ struct Clip: Identifiable {
     var transitionDuration: Double = 0.6
     var thumbnails: [CGImage] = []
 
-    var duration: CMTime { end - start }
+    // Efectos (ver Effects.swift).
+    /// Velocidad de reproducción: 0.25 = cámara lenta, 4 = acelerado.
+    var speed: Double = 1
+    /// Reproduce el clip al revés usando una copia invertida del archivo (`reversedURL`).
+    var isReversed: Bool = false
+    var reversedURL: URL?
+    var look = ColorLook()
+    var framing = ClipFraming()
+    /// Clip generado con "Congelar fotograma" (imagen fija, sin audio).
+    var isFreezeFrame: Bool = false
+
+    /// Duración del tramo usado dentro del archivo original (sin aplicar la velocidad).
+    var sourceDuration: CMTime { end - start }
+
+    /// Duración del clip en la línea de tiempo (ya aplicada la velocidad).
+    var duration: CMTime {
+        guard speed != 1, speed > 0 else { return sourceDuration }
+        let scaled = CMTimeMultiplyByFloat64(sourceDuration, multiplier: 1 / speed)
+        return CMTimeConvertScale(scaled, timescale: Timeline.timescale, method: .roundHalfAwayFromZero)
+    }
+
+    /// Archivo y tramo que se insertan en la composición (el archivo invertido si está en reversa).
+    var sourceURL: URL { isReversed ? (reversedURL ?? url) : url }
+
+    var sourceRange: CMTimeRange {
+        if isReversed, reversedURL != nil {
+            // En el archivo invertido el tiempo x del original queda en (duración - x).
+            return CMTimeRange(start: assetDuration - end, duration: sourceDuration)
+        }
+        return CMTimeRange(start: start, duration: sourceDuration)
+    }
+
+    /// Segundo del archivo ORIGINAL que se ve `local` segundos después del inicio del clip en la
+    /// línea de tiempo.
+    func sourceSeconds(atLocal local: Double) -> Double {
+        let offset = max(0, local) * speed
+        return isReversed ? max(start.seconds, end.seconds - offset) : min(end.seconds, start.seconds + offset)
+    }
+
+    /// Copia con un identificador nuevo (para dividir y duplicar).
+    func copyWithNewID() -> Clip {
+        var c = self
+        c.id = UUID()
+        return c
+    }
 
     /// Tamaño del video ya rotado (los videos de iPhone suelen venir "acostados" con una transformación).
     var displaySize: CGSize {

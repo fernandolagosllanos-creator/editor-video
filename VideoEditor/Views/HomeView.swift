@@ -3,7 +3,7 @@ import SwiftUI
 /// Pantalla de inicio: botón grande para crear un proyecto y galería con los proyectos guardados.
 struct HomeView: View {
     @Bindable var model: EditorModel
-    var store: ProjectStore = .shared
+    private var store: ProjectStore { .shared }
     var onNew: () -> Void
     var onOpen: (UUID) -> Void
 

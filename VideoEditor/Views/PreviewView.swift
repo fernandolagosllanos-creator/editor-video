@@ -23,6 +23,7 @@ struct PreviewView: View {
                                 model.selectedTextID = text.id
                             }
                         }
+                        StickerCanvas(model: model, size: geo.size)
                     }
                     .overlay {
                         if !model.isPlaying && model.duration > 0 {

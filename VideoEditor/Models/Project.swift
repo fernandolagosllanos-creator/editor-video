@@ -19,10 +19,14 @@ struct ProjectFile: Codable {
     var texts: [TextOverlay] = []
     var audioTracks: [AudioTrack] = []
     var originalVolume: Float = 1
-    var filter: VideoFilter = .none
+    var stickers: [StickerOverlay] = []
+    var aspect: CanvasAspect = .original
+    var canvasBackground: CanvasBackground = .blur
 
     enum CodingKeys: String, CodingKey {
-        case version, id, name, createdAt, modifiedAt, duration, clips, texts, audioTracks, originalVolume, filter
+        case version, id, name, createdAt, modifiedAt, duration, clips, texts, audioTracks, originalVolume
+        case filter  // solo para leer proyectos de la primera versión (filtro global)
+        case stickers, aspect, canvasBackground
     }
 
     init() {}
@@ -40,7 +44,13 @@ struct ProjectFile: Codable {
         texts = (try c.decodeIfPresent([Lenient<TextOverlay>].self, forKey: .texts) ?? []).compactMap(\.value)
         audioTracks = (try c.decodeIfPresent([Lenient<AudioTrack>].self, forKey: .audioTracks) ?? []).compactMap(\.value)
         originalVolume = try c.decodeIfPresent(Float.self, forKey: .originalVolume) ?? 1
-        filter = (try? c.decodeIfPresent(VideoFilter.self, forKey: .filter)) ?? VideoFilter.none
+        stickers = (try c.decodeIfPresent([Lenient<StickerOverlay>].self, forKey: .stickers) ?? []).compactMap(\.value)
+        aspect = (try? c.decodeIfPresent(CanvasAspect.self, forKey: .aspect)) ?? .original
+        canvasBackground = (try? c.decodeIfPresent(CanvasBackground.self, forKey: .canvasBackground)) ?? .blur
+        // Proyectos antiguos: el filtro global pasa a ser el color de cada clip.
+        if let legacy = try? c.decodeIfPresent(VideoFilter.self, forKey: .filter), legacy != .none {
+            for i in clips.indices where clips[i].look.isIdentity { clips[i].look.preset = legacy }
+        }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -55,7 +65,9 @@ struct ProjectFile: Codable {
         try c.encode(texts, forKey: .texts)
         try c.encode(audioTracks, forKey: .audioTracks)
         try c.encode(originalVolume, forKey: .originalVolume)
-        try c.encode(filter, forKey: .filter)
+        try c.encode(stickers, forKey: .stickers)
+        try c.encode(aspect, forKey: .aspect)
+        try c.encode(canvasBackground, forKey: .canvasBackground)
     }
 }
 
@@ -97,6 +109,7 @@ extension Clip: Codable {
     enum CodingKeys: String, CodingKey {
         case id, file, name, assetDuration, naturalWidth, naturalHeight, transform, hasAudio
         case start, end, transitionOut, transitionDuration
+        case speed, isReversed, reversedFile, look, framing, isFreezeFrame
     }
 
     init(from decoder: Decoder) throws {
@@ -117,6 +130,16 @@ extension Clip: Codable {
                   end: Timeline.time(try c.decode(Double.self, forKey: .end)))
         transitionOut = (try? c.decodeIfPresent(TransitionType.self, forKey: .transitionOut)) ?? TransitionType.none
         transitionDuration = try c.decodeIfPresent(Double.self, forKey: .transitionDuration) ?? 0.6
+        speed = try c.decodeIfPresent(Double.self, forKey: .speed) ?? 1
+        look = (try? c.decodeIfPresent(ColorLook.self, forKey: .look)) ?? ColorLook()
+        framing = (try? c.decodeIfPresent(ClipFraming.self, forKey: .framing)) ?? ClipFraming()
+        isFreezeFrame = try c.decodeIfPresent(Bool.self, forKey: .isFreezeFrame) ?? false
+        // Si se perdió la copia invertida, el clip vuelve a reproducirse hacia adelante.
+        if let file = try c.decodeIfPresent(String.self, forKey: .reversedFile),
+           let reversed = try? MediaReference.decode(file) {
+            reversedURL = reversed
+            isReversed = try c.decodeIfPresent(Bool.self, forKey: .isReversed) ?? false
+        }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -134,6 +157,12 @@ extension Clip: Codable {
         try c.encode(end.seconds, forKey: .end)
         try c.encode(transitionOut, forKey: .transitionOut)
         try c.encode(transitionDuration, forKey: .transitionDuration)
+        try c.encode(speed, forKey: .speed)
+        try c.encode(isReversed, forKey: .isReversed)
+        try c.encodeIfPresent(reversedURL.map(MediaReference.encode), forKey: .reversedFile)
+        try c.encode(look, forKey: .look)
+        try c.encode(framing, forKey: .framing)
+        try c.encode(isFreezeFrame, forKey: .isFreezeFrame)
     }
 }
 

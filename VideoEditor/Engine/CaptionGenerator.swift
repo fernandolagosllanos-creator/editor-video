@@ -76,7 +76,7 @@ enum CaptionGenerator {
         let voices = audioTracks.filter { $0.kind == .voice }
         guard clips.contains(where: \.hasAudio) || !voices.isEmpty else { throw CaptionError.noAudio }
         let built = try await CompositionBuilder.build(clips: clips, audioTracks: voices, originalVolume: 1,
-                                                       filter: .none, texts: [], forExport: false)
+                                                       texts: [], forExport: false)
         guard let session = AVAssetExportSession(asset: built.composition, presetName: AVAssetExportPresetAppleM4A) else {
             throw CaptionError.exportFailed("formato no disponible")
         }

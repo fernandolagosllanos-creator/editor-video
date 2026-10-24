@@ -44,13 +44,13 @@ extension EditorModel {
 
 extension Clip {
     /// Segundo del archivo original que se ve a `offset` segundos del inicio del clip en la línea
-    /// de tiempo. (Si en el futuro hay velocidad por clip, se multiplica aquí.)
+    /// de tiempo (considera velocidad y reversa).
     func sourceSeconds(atTimelineOffset offset: Double) -> Double {
-        start.seconds + offset
+        sourceSeconds(atLocal: offset)
     }
 
     /// Cuántos segundos del archivo equivalen a `delta` segundos de línea de tiempo.
     func sourceDelta(forTimelineDelta delta: Double) -> Double {
-        delta
+        delta * max(speed, 0.01)
     }
 }

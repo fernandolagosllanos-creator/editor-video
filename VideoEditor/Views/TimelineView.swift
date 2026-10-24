@@ -22,6 +22,7 @@ struct TimelineView: View {
     static func height(for model: EditorModel) -> CGFloat {
         var h = rulerHeight + clipHeight + spacing + 18
         if !model.texts.isEmpty { h += rowHeight + spacing }
+        if !model.stickers.isEmpty { h += rowHeight + spacing }
         h += CGFloat(min(model.audioTracks.count, 4)) * (rowHeight + spacing)
         return h
     }
@@ -33,6 +34,7 @@ struct TimelineView: View {
     @State private var reorder: ReorderState?
     @State private var textDrag: ItemDrag?
     @State private var audioDrag: ItemDrag?
+    @State private var stickerDrag: ItemDrag?
     @State private var selectedAudioID: UUID?
 
     private let tile: CGFloat = 54
@@ -49,6 +51,7 @@ struct TimelineView: View {
                         selectedAudioID = nil
                         model.select(clipID: nil)
                         model.selectedTextID = nil
+                        model.selectedStickerID = nil
                     }
 
                 if model.clips.isEmpty {
@@ -60,6 +63,10 @@ struct TimelineView: View {
                             .frame(width: geo.size.width, height: Self.clipHeight, alignment: .topLeading)
                         if !model.texts.isEmpty {
                             textsRow(center: center)
+                                .frame(width: geo.size.width, height: Self.rowHeight, alignment: .topLeading)
+                        }
+                        if !model.stickers.isEmpty {
+                            stickersRow(center: center)
                                 .frame(width: geo.size.width, height: Self.rowHeight, alignment: .topLeading)
                         }
                         ForEach(model.audioTracks.prefix(4)) { track in
@@ -298,7 +305,7 @@ struct TimelineView: View {
         }
         .overlay(alignment: .top) {
             if let trim, trim.id == clip.id {
-                Text(formatTime(trim.end - trim.start))
+                Text(formatTime(Timeline.time(trim.end - trim.start).seconds / max(clip.speed, 0.01)))
                     .font(.system(size: 10, weight: .bold, design: .rounded))
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Theme.gradient, in: Capsule())
@@ -330,10 +337,13 @@ struct TimelineView: View {
                         }
                         guard var draft = trim else { return }
                         let delta = clip.sourceDelta(forTimelineDelta: Double(value.translation.width / pixelsPerSecond))
-                        if edge == .leading {
-                            draft.start = min(max(0, draft.originStart + delta), draft.originEnd - 0.2)
+                        // En un clip en reversa, el borde izquierdo de la línea de tiempo es el final del archivo.
+                        let movesStart = (edge == .leading) != clip.isReversed
+                        let change = clip.isReversed ? -delta : delta
+                        if movesStart {
+                            draft.start = min(max(0, draft.originStart + change), draft.originEnd - 0.2)
                         } else {
-                            draft.end = max(min(clip.assetDuration.seconds, draft.originEnd + delta), draft.originStart + 0.2)
+                            draft.end = max(min(clip.assetDuration.seconds, draft.originEnd + change), draft.originStart + 0.2)
                         }
                         trim = draft
                     }
@@ -449,6 +459,56 @@ struct TimelineView: View {
         .frame(height: Self.rowHeight)
     }
 
+    // MARK: - Stickers
+
+    private func stickersRow(center: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear.frame(height: Self.rowHeight)
+            ForEach(model.stickers) { s in
+                let isSelected = s.id == model.selectedStickerID
+                let delta = stickerDrag?.id == s.id ? stickerDrag?.delta ?? 0 : 0
+                HStack(spacing: 5) {
+                    switch s.content {
+                    case .emoji(let e): Text(e).font(.system(size: 13))
+                    case .shape: Image(systemName: "star.fill").font(.system(size: 10, weight: .bold))
+                    }
+                    if isSelected {
+                        Image(systemName: "pencil").font(.system(size: 10, weight: .bold))
+                    }
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .frame(width: max(34, CGFloat(s.duration) * pixelsPerSecond), height: Self.rowHeight - 4, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.sticker.opacity(0.45)))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isSelected ? Color.white : Theme.sticker.opacity(0.8), lineWidth: isSelected ? 2 : 1))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    model.seek(to: s.start + 0.05)
+                    if isSelected {
+                        model.editingStickerID = s.id
+                    } else {
+                        model.selectedStickerID = s.id
+                        model.selectedTextID = nil
+                    }
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 3, coordinateSpace: .global)
+                        .onChanged { v in stickerDrag = ItemDrag(id: s.id, delta: Double(v.translation.width / pixelsPerSecond)) }
+                        .onEnded { _ in
+                            var moved = s
+                            moved.start = min(max(0, s.start + (stickerDrag?.delta ?? 0)), max(0, model.duration - 0.2))
+                            model.update(moved)
+                            stickerDrag = nil
+                        },
+                    including: isSelected ? .all : .subviews
+                )
+                .offset(x: x(s.start + delta, center: center), y: 2)
+            }
+        }
+        .frame(height: Self.rowHeight)
+    }
+
     // MARK: - Audio
 
     private func audioRow(_ track: AudioTrack, center: CGFloat) -> some View {
@@ -539,7 +599,8 @@ struct ClipView: View {
                 ZStack {
                     Theme.background.opacity(0.85)
                     if let waveform {
-                        WaveformShape(waveform: waveform, sourceStart: clip.start.seconds, pixelsPerSecond: pixelsPerSecond)
+                        WaveformShape(waveform: waveform, sourceStart: clip.start.seconds,
+                                      pixelsPerSecond: pixelsPerSecond / CGFloat(max(clip.speed, 0.01)))
                             .fill(muted ? Color.white.opacity(0.2) : Theme.audio.opacity(0.9))
                             .padding(.vertical, 2)
                     }
@@ -552,6 +613,12 @@ struct ClipView: View {
             if !compact && width > 44 {
                 HStack(spacing: 3) {
                     Text(formatTime(clip.duration.seconds))
+                    if clip.speed != 1 {
+                        Text(clip.speed < 1 ? String(format: "%.2gx", clip.speed) : String(format: "%gx", clip.speed))
+                            .foregroundStyle(Theme.accent3)
+                    }
+                    if clip.isReversed { Image(systemName: "backward.fill").foregroundStyle(Theme.accent3) }
+                    if clip.isFreezeFrame { Image(systemName: "snowflake") }
                     if muted && clip.hasAudio { Image(systemName: "speaker.slash.fill") }
                 }
                 .font(.system(size: 9, weight: .bold, design: .rounded))

@@ -152,6 +152,8 @@ enum Exporter {
 
         session.videoComposition = built.videoComposition
         session.audioMix = built.audioMix
+        // Conserva el tono de la voz en los clips con velocidad cambiada.
+        session.audioTimePitchAlgorithm = .spectral
         session.shouldOptimizeForNetworkUse = true
 
         if #available(iOS 18.0, macOS 15.0, *) {

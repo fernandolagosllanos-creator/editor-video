@@ -145,7 +145,7 @@ final class ProjectStore {
 
     // MARK: - Utilidades
 
-    /// Nombres de archivo de MediaStore que usa un proyecto guardado (busca cualquier campo "file").
+    /// Nombres de archivo de MediaStore que usa un proyecto guardado (busca los campos "file" y "reversedFile").
     nonisolated static func mediaFiles(in id: UUID) -> Set<String> {
         guard let data = try? Data(contentsOf: fileURL(for: id)),
               let json = try? JSONSerialization.jsonObject(with: data)
@@ -154,7 +154,7 @@ final class ProjectStore {
         func walk(_ value: Any) {
             if let dict = value as? [String: Any] {
                 for (k, v) in dict {
-                    if k == "file", let s = v as? String { out.insert(s) } else { walk(v) }
+                    if k == "file" || k == "reversedFile", let s = v as? String { out.insert(s) } else { walk(v) }
                 }
             } else if let array = value as? [Any] {
                 array.forEach(walk)

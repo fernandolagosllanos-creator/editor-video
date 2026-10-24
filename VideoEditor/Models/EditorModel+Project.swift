@@ -15,6 +15,7 @@ extension EditorModel {
         store.filesInUse = { [weak self] in
             guard let self else { return [] }
             var names = Set(self.clips.map { MediaReference.encode($0.url) })
+            names.formUnion(self.clips.compactMap { $0.reversedURL.map(MediaReference.encode) })
             names.formUnion(self.audioTracks.map { MediaReference.encode($0.url) })
             return names
         }
@@ -32,7 +33,9 @@ extension EditorModel {
         file.texts = texts
         file.audioTracks = audioTracks
         file.originalVolume = originalVolume
-        file.filter = filter
+        file.stickers = stickers
+        file.aspect = aspect
+        file.canvasBackground = canvasBackground
         return file
     }
 
@@ -93,8 +96,11 @@ extension EditorModel {
         texts = []
         audioTracks = []
         originalVolume = 1
-        filter = .none
+        stickers = []
+        aspect = .original
+        canvasBackground = .blur
         selectedClipID = nil
+        selectedStickerID = nil
         selectedTextID = nil
         exportedURL = nil
         currentTime = 0
@@ -129,7 +135,10 @@ extension EditorModel {
         texts = file.texts
         audioTracks = file.audioTracks
         originalVolume = file.originalVolume
-        filter = file.filter
+        stickers = file.stickers
+        aspect = file.aspect
+        canvasBackground = file.canvasBackground
+        selectedStickerID = nil
         selectedClipID = restored.first?.id
         selectedTextID = nil
         exportedURL = nil
