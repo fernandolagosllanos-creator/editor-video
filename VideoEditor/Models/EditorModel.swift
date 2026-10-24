@@ -276,6 +276,15 @@ final class EditorModel {
         rebuild()
     }
 
+    /// La misma transición entre todos los clips.
+    func setTransitionForAll(_ type: TransitionType, duration: Double) {
+        for i in clips.indices {
+            clips[i].transitionOut = type
+            clips[i].transitionDuration = duration
+        }
+        rebuild()
+    }
+
     func duplicateSelectedClip() {
         guard let index = selectedClipIndex else { return }
         let copy = clips[index].copyWithNewID()

@@ -9,29 +9,47 @@ import SwiftUI
 // MARK: - Transiciones
 
 enum TransitionType: String, CaseIterable, Identifiable, Codable {
-    case none, crossfade, fadeBlack, slideLeft, zoom, wipe
+    case none, crossfade, fadeBlack, slideLeft, slideUp, zoom, wipe, iris
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .none: return "Ninguna"
-        case .crossfade: return "Fundido cruzado"
-        case .fadeBlack: return "Fundido a negro"
+        case .none: return "Corte"
+        case .crossfade: return "Fundido"
+        case .fadeBlack: return "A negro"
         case .slideLeft: return "Deslizar"
+        case .slideUp: return "Subir"
         case .zoom: return "Zoom"
         case .wipe: return "Barrido"
+        case .iris: return "Círculo"
+        }
+    }
+
+    /// Descripción corta que se muestra bajo la vista previa.
+    var detail: String {
+        switch self {
+        case .none: return "Pasa al siguiente clip de golpe, sin efecto."
+        case .crossfade: return "Un clip se funde suavemente sobre el otro."
+        case .fadeBlack: return "Se oscurece hasta negro y aparece el siguiente."
+        case .slideLeft: return "El siguiente clip entra empujando desde la derecha."
+        case .slideUp: return "El siguiente clip sube desde abajo."
+        case .zoom: return "Se acerca y se funde con el siguiente."
+        case .wipe: return "Una cortina revela el siguiente clip de izquierda a derecha."
+        case .iris: return "Un círculo se abre desde el centro mostrando el siguiente."
         }
     }
 
     var symbol: String {
         switch self {
-        case .none: return "xmark"
-        case .crossfade: return "circle.lefthalf.filled"
+        case .none: return "scissors"
+        case .crossfade: return "square.on.square"
         case .fadeBlack: return "moon.fill"
-        case .slideLeft: return "arrow.left.square"
-        case .zoom: return "plus.magnifyingglass"
+        case .slideLeft: return "arrow.left.to.line"
+        case .slideUp: return "arrow.up.to.line"
+        case .zoom: return "arrow.up.left.and.arrow.down.right"
         case .wipe: return "rectangle.lefthalf.inset.filled"
+        case .iris: return "circle.circle"
         }
     }
 }

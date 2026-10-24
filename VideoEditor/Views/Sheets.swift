@@ -39,49 +39,7 @@ struct TrimSheet: View {
     }
 }
 
-// MARK: - Transición
-
-struct TransitionSheet: View {
-    @Bindable var model: EditorModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var type: TransitionType = .crossfade
-    @State private var seconds: Double = 0.6
-
-    var body: some View {
-        SheetContainer(title: "Transición al siguiente clip") {
-            VStack(alignment: .leading, spacing: 18) {
-                Picker("Tipo", selection: $type) {
-                    ForEach(TransitionType.allCases) { t in
-                        Label(t.label, systemImage: t.symbol).tag(t)
-                    }
-                }
-                #if os(iOS)
-                .pickerStyle(.navigationLink)
-                #endif
-                LabeledContent("Duración", value: String(format: "%.1f s", seconds))
-                Slider(value: $seconds, in: 0.2...2.0, step: 0.1)
-                    .disabled(type == .none)
-                if model.selectedClipIndex == (model.clips.count - 1) {
-                    Text("Este es el último clip: la transición se aplicará cuando agregues otro después.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-            }
-        } actions: {
-            Button("Cancelar") { dismiss() }
-            Button("Aplicar") {
-                model.setTransition(type, duration: seconds)
-                dismiss()
-            }
-            .keyboardShortcut(.defaultAction)
-        }
-        .onAppear {
-            if let clip = model.selectedClip {
-                type = clip.transitionOut == .none ? .crossfade : clip.transitionOut
-                seconds = clip.transitionDuration
-            }
-        }
-    }
-}
+// La hoja de transiciones está en TransitionSheet.swift.
 
 // MARK: - Texto
 
