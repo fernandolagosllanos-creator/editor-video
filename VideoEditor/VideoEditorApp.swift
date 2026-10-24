@@ -24,6 +24,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSplash = true
     @State private var isEditing = false
+    @State private var openFolderID: UUID?
 
     var body: some View {
         ZStack {
@@ -32,7 +33,7 @@ struct RootView: View {
                     .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
                                             removal: .move(edge: .trailing).combined(with: .opacity)))
             } else {
-                HomeView(model: model, onNew: newProject, onOpen: openProject)
+                HomeView(model: model, openFolderID: $openFolderID, onNew: newProject, onOpen: openProject)
                     .transition(.asymmetric(insertion: .move(edge: .leading).combined(with: .opacity),
                                             removal: .move(edge: .leading).combined(with: .opacity)))
             }
@@ -61,13 +62,16 @@ struct RootView: View {
         .preferredColorScheme(.dark)
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { Task { await model.saveNow() } }
+            // Las carpetas privadas se vuelven a cerrar al salir de la app.
+            if phase == .background { FolderStore.shared.lockAll() }
         }
     }
 
-    private func newProject() {
+    private func newProject(in folder: UUID?) {
         Task {
             await model.saveNow()
             model.newProject()
+            if let folder { FolderStore.shared.move(model.projectID, to: folder) }
             withAnimation(Theme.spring) { isEditing = true }
         }
     }

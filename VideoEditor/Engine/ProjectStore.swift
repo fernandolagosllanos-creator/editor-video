@@ -123,6 +123,10 @@ final class ProjectStore {
             json["createdAt"] = now
             json["modifiedAt"] = now
         }
+        // La copia queda en la misma carpeta que el original.
+        if let folder = FolderStore.shared.folderID(of: id) {
+            FolderStore.shared.move(newID, to: folder)
+        }
         refresh()
         return newID
     }
@@ -139,6 +143,7 @@ final class ProjectStore {
         for name in doomed.subtracting(stillUsed) {
             try? fm.removeItem(at: MediaStore.directory.appendingPathComponent(name))
         }
+        FolderStore.shared.forget(id)
         didDelete?(id)
         refresh()
     }
