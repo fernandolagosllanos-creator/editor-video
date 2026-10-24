@@ -96,7 +96,14 @@ struct TextOverlayView: View {
             .foregroundStyle(text.color.color)
             .multilineTextAlignment(.center)
             .shadow(color: .black.opacity(0.85), radius: CGFloat(text.fontSize) * size.height * 0.06, y: 1)
-            .padding(4)
+            .padding(.horizontal, text.hasBackground ? CGFloat(text.fontSize) * size.height * 0.35 : 4)
+            .padding(.vertical, text.hasBackground ? CGFloat(text.fontSize) * size.height * 0.18 : 4)
+            .background {
+                if text.hasBackground {
+                    RoundedRectangle(cornerRadius: CGFloat(text.fontSize) * size.height * 0.28)
+                        .fill(Color.black.opacity(0.62))
+                }
+            }
             .overlay {
                 if isSelected {
                     RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.gradient, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))

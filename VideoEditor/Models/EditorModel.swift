@@ -16,6 +16,14 @@ final class EditorModel {
     var originalVolume: Float = 1
     var filter: VideoFilter = .none
 
+    // Proyecto guardado (ver EditorModel+Project.swift)
+    var projectID = UUID()
+    var projectName = "Proyecto"
+    var projectCreatedAt = Date()
+    var isRestoringProject = false
+    @ObservationIgnored var saveTask: Task<Void, Never>?
+    @ObservationIgnored var savedThumbnailKey: String?
+
     // Reproducción
     let player = AVPlayer()
     var currentTime: Double = 0
@@ -51,6 +59,7 @@ final class EditorModel {
                 self?.isPlaying = false
             }
         }
+        connectProjectStore()
     }
 
     // MARK: - Datos derivados
@@ -127,7 +136,7 @@ final class EditorModel {
         }
     }
 
-    func addAudio(from url: URL) async {
+    func addAudio(from url: URL, kind: AudioKind = .music, name: String? = nil, start: Double? = nil) async {
         do {
             let asset = AVURLAsset(url: url)
             let found = try await asset.loadTracks(withMediaType: .audio)
@@ -136,8 +145,13 @@ final class EditorModel {
                 return
             }
             let assetDuration = try await asset.load(.duration)
-            let track = AudioTrack(id: UUID(), url: url, name: url.lastPathComponent,
-                                   assetDuration: assetDuration, start: currentTime, volume: 1)
+            var track = AudioTrack(id: UUID(), url: url, name: name ?? url.deletingPathExtension().lastPathComponent,
+                                   assetDuration: assetDuration, kind: kind, start: start ?? currentTime, volume: 1)
+            if kind == .music {
+                // Las canciones empiezan y terminan suave por defecto.
+                track.fadeIn = min(1, assetDuration.seconds / 4)
+                track.fadeOut = min(2, assetDuration.seconds / 4)
+            }
             audioTracks.append(track)
             rebuild()
         } catch {
@@ -231,22 +245,26 @@ final class EditorModel {
         t.duration = min(3, max(0.5, duration - t.start))
         texts.append(t)
         selectedTextID = t.id
+        scheduleSave()
         return t
     }
 
     func update(_ text: TextOverlay) {
         guard let i = texts.firstIndex(where: { $0.id == text.id }) else { return }
         texts[i] = text
+        scheduleSave()
     }
 
     func moveText(id: UUID, to position: CGPoint) {
         guard let i = texts.firstIndex(where: { $0.id == id }) else { return }
         texts[i].position = CGPoint(x: min(max(0.05, position.x), 0.95), y: min(max(0.05, position.y), 0.95))
+        scheduleSave()
     }
 
     func removeText(id: UUID) {
         texts.removeAll { $0.id == id }
         if selectedTextID == id { selectedTextID = nil }
+        scheduleSave()
     }
 
     // MARK: - Audio
@@ -277,6 +295,7 @@ final class EditorModel {
     // MARK: - Reconstruir la vista previa
 
     func rebuild() {
+        scheduleSave()
         rebuildTask?.cancel()
         rebuildTask = Task { await performRebuild() }
     }

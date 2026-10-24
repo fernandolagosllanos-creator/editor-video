@@ -177,20 +177,47 @@ struct TextOverlay: Identifiable {
     var color: TextColor = .white
     /// Posición normalizada (0...1) con origen arriba a la izquierda, como en SwiftUI.
     var position: CGPoint = CGPoint(x: 0.5, y: 0.82)
+    /// Caja oscura redondeada detrás del texto (estilo subtítulo).
+    var hasBackground: Bool = false
+    /// Creado por los subtítulos automáticos.
+    var isCaption: Bool = false
 
     var end: Double { start + duration }
 }
 
 // MARK: - Pista de audio adicional
 
+enum AudioKind: String, Codable {
+    case music, voice
+
+    var symbol: String { self == .music ? "music.note" : "mic.fill" }
+}
+
 struct AudioTrack: Identifiable {
     let id: UUID
     let url: URL
-    let name: String
+    var name: String
     let assetDuration: CMTime
+    var kind: AudioKind = .music
     /// Segundos dentro de la línea de tiempo donde empieza a sonar.
     var start: Double = 0
     var volume: Float = 1
+    /// Segundos que se saltan al principio del archivo (elegir qué parte de la canción suena).
+    var sourceOffset: Double = 0
+    /// Duración de los fundidos de entrada y salida, en segundos.
+    var fadeIn: Double = 0
+    var fadeOut: Double = 0
+    /// Repetir el audio hasta el final del video.
+    var loops: Bool = false
+    /// Bajar el volumen automáticamente mientras suena una voz en off.
+    var ducking: Bool = true
+
+    /// Segundos que suena en una línea de tiempo de duración `total`.
+    func playedDuration(total: Double) -> Double {
+        let available = max(0, total - start)
+        if loops { return available }
+        return min(max(0, assetDuration.seconds - sourceOffset), available)
+    }
 }
 
 // MARK: - Ubicación de cada clip en la línea de tiempo

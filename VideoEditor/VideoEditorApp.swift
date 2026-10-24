@@ -18,16 +18,37 @@ struct VideoEditorApp: App {
     }
 }
 
-/// Muestra la bienvenida animada y después el editor.
+/// Bienvenida animada → pantalla de inicio con la galería → editor.
 struct RootView: View {
     @Bindable var model: EditorModel
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showSplash = true
+    @State private var isEditing = false
 
     var body: some View {
         ZStack {
-            EditorView(model: model)
-                .opacity(showSplash ? 0 : 1)
-                .scaleEffect(showSplash ? 0.96 : 1)
+            if isEditing {
+                EditorView(model: model, onClose: closeEditor)
+                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                                            removal: .move(edge: .trailing).combined(with: .opacity)))
+            } else {
+                HomeView(model: model, onNew: newProject, onOpen: openProject)
+                    .transition(.asymmetric(insertion: .move(edge: .leading).combined(with: .opacity),
+                                            removal: .move(edge: .leading).combined(with: .opacity)))
+            }
+            if model.isBusy && !isEditing {
+                ZStack {
+                    Color.black.opacity(0.45)
+                    VStack(spacing: 12) {
+                        ProgressView().controlSize(.large).tint(.white)
+                        Text("Abriendo proyecto…").font(.system(.headline, design: .rounded)).foregroundStyle(.white)
+                    }
+                    .padding(26)
+                    .glassCard(cornerRadius: 22)
+                }
+                .ignoresSafeArea()
+                .transition(.opacity)
+            }
             if showSplash {
                 SplashView {
                     withAnimation(.easeInOut(duration: 0.45)) { showSplash = false }
@@ -38,5 +59,30 @@ struct RootView: View {
         }
         .background(Theme.background.ignoresSafeArea())
         .preferredColorScheme(.dark)
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { Task { await model.saveNow() } }
+        }
+    }
+
+    private func newProject() {
+        Task {
+            await model.saveNow()
+            model.newProject()
+            withAnimation(Theme.spring) { isEditing = true }
+        }
+    }
+
+    private func openProject(_ id: UUID) {
+        Task {
+            await model.openProject(id: id)
+            model.select(clipID: nil)
+            withAnimation(Theme.spring) { isEditing = true }
+        }
+    }
+
+    private func closeEditor() {
+        model.player.pause()
+        Task { await model.saveNow() }
+        withAnimation(Theme.spring) { isEditing = false }
     }
 }

@@ -415,7 +415,7 @@ struct TimelineView: View {
                 let isSelected = t.id == model.selectedTextID
                 let delta = textDrag?.id == t.id ? textDrag?.delta ?? 0 : 0
                 HStack(spacing: 5) {
-                    Image(systemName: isSelected ? "pencil" : "textformat")
+                    Image(systemName: isSelected ? "pencil" : (t.isCaption ? "captions.bubble" : "textformat"))
                         .font(.system(size: 10, weight: .bold))
                     Text(t.text).font(.system(size: 11, weight: .semibold, design: .rounded)).lineLimit(1)
                 }
@@ -454,21 +454,23 @@ struct TimelineView: View {
     private func audioRow(_ track: AudioTrack, center: CGFloat) -> some View {
         let isSelected = selectedAudioID == track.id
         let delta = audioDrag?.id == track.id ? audioDrag?.delta ?? 0 : 0
-        let visible = max(0.5, min(track.assetDuration.seconds, max(0.5, model.duration - track.start)))
+        let visible = max(0.5, track.playedDuration(total: model.duration))
+        let tint = track.kind == .voice ? Theme.accent2 : Theme.audio
         let width = max(34, CGFloat(visible) * pixelsPerSecond)
         let waveform = WaveformStore.shared.waveform(for: track.url)
         return ZStack(alignment: .topLeading) {
             Color.clear.frame(height: Self.rowHeight)
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.audio.opacity(0.22))
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tint.opacity(0.22))
                 if let waveform {
-                    WaveformShape(waveform: waveform, sourceStart: 0, pixelsPerSecond: pixelsPerSecond)
-                        .fill(Theme.audio.opacity(0.85))
+                    WaveformShape(waveform: waveform, sourceStart: track.sourceOffset, pixelsPerSecond: pixelsPerSecond)
+                        .fill(tint.opacity(0.85))
                         .padding(.vertical, 3)
                 }
                 HStack(spacing: 4) {
-                    Image(systemName: "music.note").font(.system(size: 10, weight: .bold))
+                    Image(systemName: track.kind.symbol).font(.system(size: 10, weight: .bold))
                     Text(track.name).font(.system(size: 10, weight: .semibold, design: .rounded)).lineLimit(1)
+                    if track.loops { Image(systemName: "repeat").font(.system(size: 9, weight: .bold)) }
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 6).padding(.vertical, 1)
@@ -478,7 +480,7 @@ struct TimelineView: View {
             .frame(width: width, height: Self.rowHeight - 4)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(isSelected ? Color.white : Theme.audio.opacity(0.7), lineWidth: isSelected ? 2 : 1))
+                .strokeBorder(isSelected ? Color.white : tint.opacity(0.7), lineWidth: isSelected ? 2 : 1))
             .contentShape(Rectangle())
             .onTapGesture { selectedAudioID = isSelected ? nil : track.id }
             .gesture(

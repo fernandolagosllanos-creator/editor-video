@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 enum ActiveSheet: Identifiable {
     case trim, transition, audio, filter, export
+    case voiceOver, captions
     case text(TextOverlay)
 
     var id: String {
@@ -13,6 +14,8 @@ enum ActiveSheet: Identifiable {
         case .audio: return "audio"
         case .filter: return "filter"
         case .export: return "export"
+        case .voiceOver: return "voiceOver"
+        case .captions: return "captions"
         case .text(let t): return "text-\(t.id)"
         }
     }
@@ -20,7 +23,6 @@ enum ActiveSheet: Identifiable {
 
 struct EditorView: View {
     @Bindable var model: EditorModel
-    var title: String = "Nuevo proyecto"
     /// Volver a la pantalla de inicio (nil = no se muestra el botón).
     var onClose: (() -> Void)?
 
@@ -29,6 +31,8 @@ struct EditorView: View {
     @State private var showPhotoPicker = false
     @State private var showVideoImporter = false
     @State private var pixelsPerSecond: CGFloat = 60
+    @State private var isRenaming = false
+    @State private var newName = ""
 
     var body: some View {
         ZStack {
@@ -68,6 +72,8 @@ struct EditorView: View {
                 case .audio: AudioSheet(model: model)
                 case .filter: FilterSheet(model: model)
                 case .export: ExportSheet(model: model)
+                case .voiceOver: VoiceOverSheet(model: model)
+                case .captions: CaptionsSheet(model: model)
                 case .text(let t): TextSheet(model: model, text: t)
                 }
             }
@@ -88,7 +94,7 @@ struct EditorView: View {
                     Color.black.opacity(0.45)
                     VStack(spacing: 12) {
                         ProgressView().controlSize(.large).tint(.white)
-                        Text("Importando…").font(.system(.headline, design: .rounded))
+                        Text("Cargando…").font(.system(.headline, design: .rounded))
                     }
                     .padding(26)
                     .glassCard(cornerRadius: 22)
@@ -98,6 +104,11 @@ struct EditorView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: model.isBusy)
+        .alert("Nombre del proyecto", isPresented: $isRenaming) {
+            TextField("Nombre", text: $newName)
+            Button("Cancelar", role: .cancel) {}
+            Button("Guardar") { model.renameProject(newName) }
+        }
         .photosPicker(isPresented: $showPhotoPicker, selection: $pickerItems, matching: .videos)
         .onChange(of: pickerItems) { _, items in
             guard !items.isEmpty else { return }
@@ -151,14 +162,26 @@ struct EditorView: View {
                 }
                 .buttonStyle(ChipButtonStyle())
             }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(Theme.textSecondary)
+            Button {
+                newName = model.projectName
+                isRenaming = true
+            } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 5) {
+                        Text(model.projectName)
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .lineLimit(1)
+                        Image(systemName: "pencil")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    Text(subtitle)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .foregroundStyle(.white)
             }
+            .buttonStyle(.plain)
             Spacer()
             #if os(macOS)
             Button { showVideoImporter = true } label: { Image(systemName: "plus") }
@@ -241,6 +264,8 @@ struct EditorView: View {
                 sheet = .text(t)
             },
             ToolItem("Audio", "music.note", isEnabled: hasClips) { sheet = .audio },
+            ToolItem("Voz", "mic.fill", isEnabled: hasClips) { sheet = .voiceOver },
+            ToolItem("Subtítulos", "captions.bubble", isEnabled: hasClips) { sheet = .captions },
             ToolItem("Efectos", "sparkles", isEnabled: hasClips) {
                 if selectClipUnderPlayhead() { sheet = .transition }
             },
