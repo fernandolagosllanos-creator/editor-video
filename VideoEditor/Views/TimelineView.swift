@@ -85,7 +85,7 @@ struct TimelineView: View {
                 Rectangle().fill(Color(white: 0.16)).frame(height: rowHeight)
                 ForEach(model.texts) { t in
                     HStack(spacing: 4) {
-                        Image(systemName: "textformat").font(.caption2)
+                        Image(systemName: t.isCaption ? "captions.bubble" : "textformat").font(.caption2)
                         Text(t.text).font(.caption).lineLimit(1)
                     }
                     .padding(.horizontal, 6)
@@ -112,13 +112,14 @@ struct TimelineView: View {
             ZStack(alignment: .topLeading) {
                 Rectangle().fill(Color(white: 0.16)).frame(height: rowHeight)
                 HStack(spacing: 4) {
-                    Image(systemName: "music.note").font(.caption2)
+                    Image(systemName: track.kind.symbol).font(.caption2)
                     Text(track.name).font(.caption).lineLimit(1)
+                    if track.loops { Image(systemName: "repeat").font(.caption2) }
                 }
                 .padding(.horizontal, 6)
-                .frame(width: max(30, CGFloat(min(track.assetDuration.seconds, max(0, model.duration - track.start))) * pixelsPerSecond),
+                .frame(width: max(30, CGFloat(track.playedDuration(total: model.duration)) * pixelsPerSecond),
                        height: rowHeight - 4, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 5).fill(Color.teal.opacity(0.75)))
+                .background(RoundedRectangle(cornerRadius: 5).fill(track.kind == .voice ? Studio.voiceGradient : Studio.musicGradient).opacity(0.85))
                 .offset(x: CGFloat(track.start) * pixelsPerSecond, y: 2)
             }
             .frame(height: rowHeight)

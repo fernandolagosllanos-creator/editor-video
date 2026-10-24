@@ -133,7 +133,11 @@ enum CompositionBuilder {
         }
         inputParameters.append(contentsOf: originalParams)
 
-        // Pistas de audio agregadas (música, voz, etc.).
+        // Pistas de audio agregadas (música, voz en off, etc.).
+        let totalSeconds = total.seconds
+        let voiceRanges = audioTracks.filter { $0.kind == .voice }.map { v -> (Double, Double) in
+            (v.start, v.start + v.playedDuration(total: totalSeconds))
+        }
         for track in audioTracks {
             let startTime = Timeline.time(track.start)
             guard startTime < total else { continue }
@@ -141,11 +145,22 @@ enum CompositionBuilder {
             guard let source = try await asset.loadTracks(withMediaType: .audio).first,
                   let compTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
             else { continue }
-            let available = total - startTime
-            let length = min(track.assetDuration, available)
-            try compTrack.insertTimeRange(CMTimeRange(start: .zero, duration: length), of: source, at: startTime)
+            let offset = min(max(0, track.sourceOffset), max(0, track.assetDuration.seconds - 0.1))
+            let pieceLength = track.assetDuration.seconds - offset
+            guard pieceLength > 0.05 else { continue }
+            let played = track.playedDuration(total: totalSeconds)
+            // Se inserta el audio (repetido si `loops`) hasta cubrir el tiempo que debe sonar.
+            var cursor = 0.0
+            while cursor < played - 0.01 {
+                let length = min(pieceLength, played - cursor)
+                try compTrack.insertTimeRange(CMTimeRange(start: Timeline.time(offset), duration: Timeline.time(length)),
+                                              of: source, at: Timeline.time(track.start + cursor))
+                cursor += length
+                if !track.loops { break }
+            }
             let params = AVMutableAudioMixInputParameters(track: compTrack)
-            params.setVolume(track.volume, at: .zero)
+            applyEnvelope(to: params, track: track, played: played,
+                          voiceRanges: track.kind == .music && track.ducking ? voiceRanges : [])
             inputParameters.append(params)
         }
 
@@ -166,6 +181,58 @@ enum CompositionBuilder {
         let immutable = composition.copy() as! AVComposition
         return BuiltComposition(composition: immutable, videoComposition: videoComposition,
                                 audioMix: audioMix, duration: compositionDuration, renderSize: size)
+    }
+
+    // MARK: - Volumen de pistas agregadas (fundidos y atenuación bajo la voz)
+
+    /// Volumen al que baja la música mientras suena una voz en off (fracción del volumen normal).
+    static let duckLevel: Float = 0.25
+    static let duckRamp: Double = 0.35
+
+    /// Calcula el volumen como una curva por tramos (fundidos × atenuación) y la aplica con rampas.
+    static func applyEnvelope(to params: AVMutableAudioMixInputParameters, track: AudioTrack,
+                              played: Double, voiceRanges: [(Double, Double)]) {
+        let s = track.start
+        let e = track.start + played
+        let fadeIn = min(max(0, track.fadeIn), played / 2)
+        let fadeOut = min(max(0, track.fadeOut), played / 2)
+
+        func gain(_ t: Double) -> Float {
+            var g = track.volume
+            if fadeIn > 0, t < s + fadeIn { g *= Float(max(0, (t - s) / fadeIn)) }
+            if fadeOut > 0, t > e - fadeOut { g *= Float(max(0, (e - t) / fadeOut)) }
+            var duck: Float = 1
+            for (a, b) in voiceRanges {
+                var w = 0.0
+                if t >= a && t <= b { w = 1 }
+                else if t < a && t > a - duckRamp { w = 1 - (a - t) / duckRamp }
+                else if t > b && t < b + duckRamp { w = 1 - (t - b) / duckRamp }
+                duck = min(duck, 1 - (1 - duckLevel) * Float(w))
+            }
+            return g * duck
+        }
+
+        var points: [Double] = [s, e]
+        if fadeIn > 0 { points.append(s + fadeIn) }
+        if fadeOut > 0 { points.append(e - fadeOut) }
+        for (a, b) in voiceRanges {
+            points.append(contentsOf: [a - duckRamp, a, b, b + duckRamp])
+        }
+        var sorted: [Double] = []
+        for p in points.filter({ $0 >= s && $0 <= e }).sorted() where sorted.last.map({ p - $0 > 0.01 }) ?? true {
+            sorted.append(p)
+        }
+
+        if s > 0.01 { params.setVolume(gain(s), at: .zero) }
+        for (a, b) in zip(sorted, sorted.dropFirst()) {
+            let ga = gain(a), gb = gain(b)
+            let range = CMTimeRange(start: Timeline.time(a), end: Timeline.time(b))
+            if abs(ga - gb) < 0.001 {
+                params.setVolume(ga, at: range.start)
+            } else {
+                params.setVolumeRamp(fromStartVolume: ga, toEndVolume: gb, timeRange: range)
+            }
+        }
     }
 
     // MARK: - Textos para exportación (Core Animation)
@@ -204,6 +271,32 @@ enum CompositionBuilder {
                                  width: width, height: height)
             layer.opacity = 0
 
+            // Con caja de fondo: se mide el texto y se envuelve en una capa redondeada oscura.
+            var animated: CALayer = layer
+            if t.hasBackground {
+                let font = CTFontCreateWithName("HelveticaNeue-Bold" as CFString, size, nil)
+                let attributed = NSAttributedString(string: t.text,
+                                                    attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font])
+                let setter = CTFramesetterCreateWithAttributedString(attributed)
+                let measured = CTFramesetterSuggestFrameSizeWithConstraints(
+                    setter, CFRange(location: 0, length: 0), nil,
+                    CGSize(width: width, height: .greatestFiniteMagnitude), nil)
+                let padX = size * 0.35, padY = size * 0.18
+                let textSize = CGSize(width: ceil(measured.width) + 2, height: ceil(measured.height) + 2)
+                let box = CALayer()
+                box.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 0.62)
+                box.cornerRadius = size * 0.28
+                box.frame = CGRect(x: t.position.x * renderSize.width - textSize.width / 2 - padX,
+                                   y: (1 - t.position.y) * renderSize.height - textSize.height / 2 - padY,
+                                   width: textSize.width + padX * 2, height: textSize.height + padY * 2)
+                layer.shadowOpacity = 0
+                layer.opacity = 1
+                layer.frame = CGRect(x: padX, y: padY, width: textSize.width, height: textSize.height)
+                box.addSublayer(layer)
+                box.opacity = 0
+                animated = box
+            }
+
             let fade = CAKeyframeAnimation(keyPath: "opacity")
             fade.values = [0, 1, 1, 0]
             fade.keyTimes = [0, 0.08, 0.92, 1]
@@ -211,8 +304,8 @@ enum CompositionBuilder {
             fade.duration = max(0.1, t.duration)
             fade.isRemovedOnCompletion = false
             fade.fillMode = .forwards
-            layer.add(fade, forKey: "fade")
-            parent.addSublayer(layer)
+            animated.add(fade, forKey: "fade")
+            parent.addSublayer(animated)
         }
 
         return AVVideoCompositionCoreAnimationTool(postProcessingAsVideoLayer: videoLayer, in: parent)

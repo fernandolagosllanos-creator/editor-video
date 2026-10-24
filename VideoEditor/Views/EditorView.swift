@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 enum ActiveSheet: Identifiable {
     case trim, transition, audio, filter, export
+    case voiceOver, captions, projects
     case text(TextOverlay)
 
     var id: String {
@@ -13,6 +14,9 @@ enum ActiveSheet: Identifiable {
         case .audio: return "audio"
         case .filter: return "filter"
         case .export: return "export"
+        case .voiceOver: return "voiceOver"
+        case .captions: return "captions"
+        case .projects: return "projects"
         case .text(let t): return "text-\(t.id)"
         }
     }
@@ -42,12 +46,19 @@ struct EditorView: View {
                 .frame(height: timelineHeight)
             }
             .background(Color(white: 0.1))
-            .navigationTitle("Editor de Video")
+            .navigationTitle(model.projectName)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
             #endif
             .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        sheet = .projects
+                    } label: {
+                        Label("Proyectos", systemImage: "square.grid.2x2")
+                    }
+                }
                 ToolbarItemGroup(placement: .primaryAction) {
                     PhotosPicker(selection: $pickerItems, matching: .videos) {
                         Label("Fotos", systemImage: "photo.on.rectangle")
@@ -74,6 +85,9 @@ struct EditorView: View {
             case .audio: AudioSheet(model: model)
             case .filter: FilterSheet(model: model)
             case .export: ExportSheet(model: model)
+            case .voiceOver: VoiceOverSheet(model: model)
+            case .captions: CaptionsSheet(model: model)
+            case .projects: ProjectsView(model: model)
             case .text(let t): TextSheet(model: model, text: t)
             }
         }
@@ -86,7 +100,7 @@ struct EditorView: View {
             if model.isBusy {
                 ZStack {
                     Color.black.opacity(0.4)
-                    ProgressView("Importando…").padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    ProgressView("Cargando…").padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
                 .ignoresSafeArea()
             }
@@ -172,6 +186,10 @@ struct EditorView: View {
                 }
                 .disabled(model.clips.isEmpty)
                 toolButton("Audio", "music.note") { sheet = .audio }
+                    .disabled(model.clips.isEmpty)
+                toolButton("Voz", "mic.fill") { sheet = .voiceOver }
+                    .disabled(model.clips.isEmpty)
+                toolButton("Subtítulos", "captions.bubble") { sheet = .captions }
                     .disabled(model.clips.isEmpty)
                 toolButton("Filtro", "camera.filters") { sheet = .filter }
                     .disabled(model.clips.isEmpty)
