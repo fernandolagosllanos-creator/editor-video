@@ -3,17 +3,22 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 enum ActiveSheet: Identifiable {
-    case trim, transition, audio, filter, export
+    case trim, transition, audio, color, speed, canvas, stickers, export
     case text(TextOverlay)
+    case sticker(StickerOverlay)
 
     var id: String {
         switch self {
         case .trim: return "trim"
         case .transition: return "transition"
         case .audio: return "audio"
-        case .filter: return "filter"
+        case .color: return "color"
+        case .speed: return "speed"
+        case .canvas: return "canvas"
+        case .stickers: return "stickers"
         case .export: return "export"
         case .text(let t): return "text-\(t.id)"
+        case .sticker(let s): return "sticker-\(s.id)"
         }
     }
 }
@@ -72,7 +77,11 @@ struct EditorView: View {
             case .trim: TrimSheet(model: model)
             case .transition: TransitionSheet(model: model)
             case .audio: AudioSheet(model: model)
-            case .filter: FilterSheet(model: model)
+            case .color: ColorSheet(model: model)
+            case .speed: SpeedSheet(model: model)
+            case .canvas: CanvasSheet(model: model)
+            case .stickers: StickerPickerSheet(model: model)
+            case .sticker(let s): StickerSheet(model: model, sticker: s)
             case .export: ExportSheet(model: model)
             case .text(let t): TextSheet(model: model, text: t)
             }
@@ -86,10 +95,23 @@ struct EditorView: View {
             if model.isBusy {
                 ZStack {
                     Color.black.opacity(0.4)
-                    ProgressView("Importando…").padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    Group {
+                        if let p = model.busyProgress {
+                            ProgressView(model.busyMessage, value: p)
+                                .frame(width: 220)
+                        } else {
+                            ProgressView(model.busyMessage)
+                        }
+                    }
+                    .padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
                 .ignoresSafeArea()
             }
+        }
+        .onChange(of: model.editingStickerID) { _, id in
+            guard let id, let s = model.stickers.first(where: { $0.id == id }) else { return }
+            model.editingStickerID = nil
+            sheet = .sticker(s)
         }
         .onChange(of: pickerItems) { _, items in
             guard !items.isEmpty else { return }
@@ -173,7 +195,15 @@ struct EditorView: View {
                 .disabled(model.clips.isEmpty)
                 toolButton("Audio", "music.note") { sheet = .audio }
                     .disabled(model.clips.isEmpty)
-                toolButton("Filtro", "camera.filters") { sheet = .filter }
+                toolButton("Color", "camera.filters") { sheet = .color }
+                    .disabled(model.clips.isEmpty)
+                toolButton("Velocidad", "speedometer") { sheet = .speed }
+                    .disabled(model.selectedClip == nil)
+                toolButton("Congelar", "snowflake") { Task { await model.freezeFrame() } }
+                    .disabled(model.clips.isEmpty)
+                toolButton("Stickers", "face.smiling") { sheet = .stickers }
+                    .disabled(model.clips.isEmpty)
+                toolButton("Formato", "aspectratio") { sheet = .canvas }
                     .disabled(model.clips.isEmpty)
                 Divider().frame(height: 28)
                 toolButton("Atrás", "arrow.left") { model.moveSelectedClip(by: -1) }

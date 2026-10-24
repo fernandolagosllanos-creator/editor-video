@@ -14,7 +14,9 @@ final class EditorModel {
     var texts: [TextOverlay] = []
     var audioTracks: [AudioTrack] = []
     var originalVolume: Float = 1
-    var filter: VideoFilter = .none
+    var stickers: [StickerOverlay] = []
+    var aspect: CanvasAspect = .original
+    var canvasBackground: CanvasBackground = .blur
 
     // Reproducción
     let player = AVPlayer()
@@ -26,9 +28,15 @@ final class EditorModel {
     // Selección
     var selectedClipID: UUID?
     var selectedTextID: UUID?
+    var selectedStickerID: UUID?
+    /// Sticker cuya hoja de edición debe abrirse (lo pide la vista previa con doble toque).
+    var editingStickerID: UUID?
 
     // Estado de trabajo
     var isBusy = false
+    var busyMessage = "Importando…"
+    /// Progreso (0...1) de una tarea larga como la reversa; nil si no se puede medir.
+    var busyProgress: Double?
     var isExporting = false
     var exportProgress: Double = 0
     var exportedURL: URL?
@@ -67,6 +75,14 @@ final class EditorModel {
         return clips.firstIndex { $0.id == id }
     }
 
+    /// Segundo (dentro del clip) que muestran las vistas previas de las hojas de efectos: el del
+    /// cabezal si está sobre el clip, o su primer cuadro.
+    func previewLocalTime(for clip: Clip) -> Double {
+        guard let p = placements.first(where: { $0.clip.id == clip.id }) else { return 0 }
+        let local = currentTime - p.start.seconds
+        return local >= 0 && local < clip.duration.seconds ? local : 0
+    }
+
     var selectedText: TextOverlay? {
         guard let id = selectedTextID else { return nil }
         return texts.first { $0.id == id }
@@ -75,6 +91,18 @@ final class EditorModel {
     var visibleTexts: [TextOverlay] {
         texts.filter { currentTime >= $0.start && currentTime < $0.end }
     }
+
+    var visibleStickers: [StickerOverlay] {
+        stickers.filter { currentTime >= $0.start && currentTime < $0.end }
+    }
+
+    var selectedSticker: StickerOverlay? {
+        guard let id = selectedStickerID else { return nil }
+        return stickers.first { $0.id == id }
+    }
+
+    /// Tamaño del lienzo según la relación de aspecto elegida (antes de la resolución de exportación).
+    var canvasSize: CGSize { CompositionBuilder.renderSize(for: clips, aspect: aspect) }
 
     var renderAspect: CGFloat {
         renderSize.height > 0 ? renderSize.width / renderSize.height : 16 / 9
@@ -103,28 +131,34 @@ final class EditorModel {
     // MARK: - Importar
 
     func addClip(from url: URL) async {
+        busyMessage = "Importando…"
+        busyProgress = nil
         isBusy = true
         defer { isBusy = false }
         do {
-            let asset = AVURLAsset(url: url)
-            guard let track = try await asset.loadTracks(withMediaType: .video).first else {
-                errorMessage = "El archivo no contiene video."
-                return
-            }
-            let assetDuration = try await asset.load(.duration)
-            let (naturalSize, transform) = try await track.load(.naturalSize, .preferredTransform)
-            let audioTracksInFile = try await asset.loadTracks(withMediaType: .audio)
-            let hasAudio = !audioTracksInFile.isEmpty
-            var clip = Clip(id: UUID(), url: url, name: url.lastPathComponent, assetDuration: assetDuration,
-                            naturalSize: naturalSize, preferredTransform: transform, hasAudio: hasAudio,
-                            start: .zero, end: assetDuration)
-            clip.thumbnails = await Thumbnails.generate(asset: asset, duration: assetDuration, count: 8)
+            let clip = try await loadClip(from: url)
             clips.append(clip)
             selectedClipID = clip.id
             rebuild()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func loadClip(from url: URL) async throws -> Clip {
+        let asset = AVURLAsset(url: url)
+        guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+            throw ClipProcessorError.noVideo
+        }
+        let assetDuration = try await asset.load(.duration)
+        let (naturalSize, transform) = try await track.load(.naturalSize, .preferredTransform)
+        let audioTracksInFile = try await asset.loadTracks(withMediaType: .audio)
+        let hasAudio = !audioTracksInFile.isEmpty
+        var clip = Clip(id: UUID(), url: url, name: url.lastPathComponent, assetDuration: assetDuration,
+                        naturalSize: naturalSize, preferredTransform: transform, hasAudio: hasAudio,
+                        start: .zero, end: assetDuration)
+        clip.thumbnails = await Thumbnails.generate(asset: asset, duration: assetDuration, count: 8)
+        return clip
     }
 
     func addAudio(from url: URL) async {
@@ -149,33 +183,50 @@ final class EditorModel {
 
     /// Divide el clip seleccionado (o el que esté bajo el cabezal) en el tiempo actual.
     func splitAtPlayhead() {
-        let t = Timeline.time(currentTime)
-        let candidates = placements.filter { $0.start < t && t < $0.end }
-        guard let target = candidates.first(where: { $0.clip.id == selectedClipID }) ?? candidates.first,
-              let index = clips.firstIndex(where: { $0.id == target.clip.id })
-        else {
+        guard let index = clipIndexUnderPlayhead() else {
             errorMessage = "Coloca el cabezal dentro de un clip para dividirlo."
             return
         }
-        let local = target.clip.start + (t - target.start)
-        let margin = Timeline.time(0.1)
-        guard local > target.clip.start + margin, local < target.clip.end - margin else {
+        guard split(at: index, timelineTime: currentTime) else {
             errorMessage = "El corte queda demasiado cerca del borde del clip."
             return
         }
-        let source = target.clip
+        selectedClipID = clips[index + 1].id
+        rebuild()
+    }
+
+    /// Índice del clip bajo el cabezal (prefiere el seleccionado si hay dos por una transición).
+    private func clipIndexUnderPlayhead() -> Int? {
+        let t = Timeline.time(currentTime)
+        let candidates = placements.filter { $0.start <= t && t < $0.end }
+        guard let target = candidates.first(where: { $0.clip.id == selectedClipID }) ?? candidates.first else { return nil }
+        return clips.firstIndex { $0.id == target.clip.id }
+    }
+
+    /// Corta el clip `index` en el segundo `timelineTime` de la línea de tiempo. Devuelve false si
+    /// el corte queda pegado a un borde.
+    @discardableResult
+    private func split(at index: Int, timelineTime: Double) -> Bool {
+        guard let placement = placements.first(where: { $0.clip.id == clips[index].id }) else { return false }
+        let source = clips[index]
+        let local = timelineTime - placement.start.seconds
+        let cut = source.sourceSeconds(atLocal: local)
+        let margin = 0.1
+        guard cut > source.start.seconds + margin, cut < source.end.seconds - margin else { return false }
         var first = source
-        first.end = local
+        var second = source.copyWithNewID()
+        if source.isReversed {
+            // En reversa lo primero que se ve es el final del archivo.
+            first.start = Timeline.time(cut)
+            second.end = Timeline.time(cut)
+        } else {
+            first.end = Timeline.time(cut)
+            second.start = Timeline.time(cut)
+        }
         first.transitionOut = .none
-        let second = Clip(id: UUID(), url: source.url, name: source.name, assetDuration: source.assetDuration,
-                          naturalSize: source.naturalSize, preferredTransform: source.preferredTransform,
-                          hasAudio: source.hasAudio, start: local, end: source.end,
-                          transitionOut: source.transitionOut, transitionDuration: source.transitionDuration,
-                          thumbnails: source.thumbnails)
         clips[index] = first
         clips.insert(second, at: index + 1)
-        selectedClipID = second.id
-        rebuild()
+        return true
     }
 
     func deleteSelectedClip() {
@@ -213,11 +264,7 @@ final class EditorModel {
 
     func duplicateSelectedClip() {
         guard let index = selectedClipIndex else { return }
-        let c = clips[index]
-        let copy = Clip(id: UUID(), url: c.url, name: c.name, assetDuration: c.assetDuration,
-                        naturalSize: c.naturalSize, preferredTransform: c.preferredTransform, hasAudio: c.hasAudio,
-                        start: c.start, end: c.end, transitionOut: c.transitionOut,
-                        transitionDuration: c.transitionDuration, thumbnails: c.thumbnails)
+        let copy = clips[index].copyWithNewID()
         clips.insert(copy, at: index + 1)
         selectedClipID = copy.id
         rebuild()
@@ -267,11 +314,135 @@ final class EditorModel {
         rebuild()
     }
 
-    // MARK: - Filtro
+    // MARK: - Efectos (color, velocidad, reversa, congelar, formato, stickers)
 
-    func setFilter(_ f: VideoFilter) {
-        filter = f
+    /// Cambia el color del clip seleccionado, o de todos los clips.
+    func setLook(_ look: ColorLook, applyToAll: Bool) {
+        if applyToAll {
+            for i in clips.indices { clips[i].look = look }
+        } else if let index = selectedClipIndex {
+            clips[index].look = look
+        }
         rebuild()
+    }
+
+    func setSpeed(_ speed: Double) {
+        guard let index = selectedClipIndex else { return }
+        clips[index].speed = min(max(speed, 0.25), 4)
+        rebuild()
+    }
+
+    /// Activa o quita la reversa del clip seleccionado. La primera vez genera la copia invertida.
+    func setReversed(_ on: Bool) async {
+        guard let id = selectedClipID, let index = selectedClipIndex else { return }
+        if on, clips[index].reversedURL == nil {
+            let url = clips[index].url
+            busyMessage = "Invirtiendo el clip…"
+            busyProgress = 0
+            isBusy = true
+            defer { isBusy = false; busyProgress = nil }
+            do {
+                let reversed = try await ClipProcessor.reversedCopy(of: url) { [weak self] p in
+                    Task { @MainActor in self?.busyProgress = p }
+                }
+                // Todos los trozos del mismo archivo pueden reutilizar la copia.
+                for i in clips.indices where clips[i].url == url { clips[i].reversedURL = reversed }
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
+        }
+        guard let i = clips.firstIndex(where: { $0.id == id }), clips[i].isReversed != on else { return }
+        clips[i].isReversed = on
+        clips[i].thumbnails.reverse()
+        rebuild()
+    }
+
+    /// Congela el cuadro bajo el cabezal: corta el clip ahí e inserta una imagen fija de `seconds`.
+    func freezeFrame(seconds: Double = 2) async {
+        guard let index = clipIndexUnderPlayhead(),
+              let placement = placements.first(where: { $0.clip.id == clips[index].id }) else {
+            errorMessage = "Coloca el cabezal sobre un clip para congelar ese cuadro."
+            return
+        }
+        player.pause()
+        let source = clips[index]
+        let timelineTime = currentTime
+        let local = timelineTime - placement.start.seconds
+        busyMessage = "Congelando fotograma…"
+        busyProgress = nil
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let image = try await Thumbnails.frame(of: source, atLocal: local, maxSide: nil)
+            let url = try await ClipProcessor.stillVideo(from: image, seconds: seconds)
+            var still = try await loadClip(from: url)
+            still.name = "Congelado"
+            still.isFreezeFrame = true
+            still.look = source.look
+            still.framing = source.framing
+            guard let i = clips.firstIndex(where: { $0.id == source.id }) else { return }
+            // Al inicio del clip la imagen va antes; si no, se corta el clip y va entre las dos
+            // partes (o después, si el cabezal está pegado al final).
+            let insertAt: Int
+            if local < 0.15 {
+                insertAt = i
+            } else {
+                split(at: i, timelineTime: timelineTime)
+                insertAt = i + 1
+            }
+            clips.insert(still, at: insertAt)
+            selectedClipID = still.id
+            rebuild()
+            seek(to: timelineTime)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func setFraming(_ framing: ClipFraming, applyToAll: Bool) {
+        if applyToAll {
+            for i in clips.indices { clips[i].framing = framing }
+        } else if let index = selectedClipIndex {
+            clips[index].framing = framing
+        }
+        rebuild()
+    }
+
+    func setCanvas(aspect: CanvasAspect, background: CanvasBackground) {
+        self.aspect = aspect
+        canvasBackground = background
+        rebuild()
+    }
+
+    func addSticker(_ content: StickerContent) -> StickerOverlay {
+        var s = StickerOverlay()
+        s.content = content
+        s.color = content.isShape ? .yellow : .white
+        s.start = min(currentTime, max(0, duration - 1))
+        s.duration = min(3, max(0.5, duration - s.start))
+        // Cada sticker nuevo un poco desplazado para que no queden todos encima.
+        let n = Double(stickers.count % 5)
+        s.position = CGPoint(x: 0.5 + (n - 2) * 0.06, y: 0.42 + (n - 2) * 0.04)
+        stickers.append(s)
+        selectedStickerID = s.id
+        selectedTextID = nil
+        return s
+    }
+
+    func update(_ sticker: StickerOverlay) {
+        guard let i = stickers.firstIndex(where: { $0.id == sticker.id }) else { return }
+        stickers[i] = sticker
+    }
+
+    func moveSticker(id: UUID, to position: CGPoint) {
+        guard let i = stickers.firstIndex(where: { $0.id == id }) else { return }
+        stickers[i].position = CGPoint(x: min(max(0, position.x), 1), y: min(max(0, position.y), 1))
+    }
+
+    func removeSticker(id: UUID) {
+        stickers.removeAll { $0.id == id }
+        if selectedStickerID == id { selectedStickerID = nil }
     }
 
     // MARK: - Reconstruir la vista previa
@@ -290,10 +461,13 @@ final class EditorModel {
         }
         do {
             let built = try await CompositionBuilder.build(clips: clips, audioTracks: audioTracks,
-                                                           originalVolume: originalVolume, filter: filter,
-                                                           texts: texts, forExport: false)
+                                                           originalVolume: originalVolume,
+                                                           texts: texts, aspect: aspect, canvas: canvasBackground,
+                                                           forExport: false)
             if Task.isCancelled { return }
             let item = AVPlayerItem(asset: built.composition)
+            // Conserva el tono de la voz en cámara lenta o acelerado.
+            item.audioTimePitchAlgorithm = .spectral
             item.videoComposition = built.videoComposition
             item.audioMix = built.audioMix
             let wasPlaying = player.rate > 0
@@ -322,10 +496,14 @@ final class EditorModel {
         exportedURL = nil
         defer { isExporting = false }
         do {
-            let size = exportSettings.outputSize(from: CompositionBuilder.renderSize(for: clips))
+            let size = exportSettings.outputSize(from: canvasSize)
+            let stickerImages = StickerRenderer.images(for: stickers, canvasSize: size)
             let built = try await CompositionBuilder.build(clips: clips, audioTracks: audioTracks,
-                                                           originalVolume: originalVolume, filter: filter,
-                                                           texts: texts, forExport: true, outputSize: size)
+                                                           originalVolume: originalVolume,
+                                                           texts: texts, stickers: stickers,
+                                                           stickerImages: stickerImages,
+                                                           aspect: aspect, canvas: canvasBackground,
+                                                           forExport: true, outputSize: size)
             let url = try await Exporter.export(built, settings: exportSettings) { [weak self] p in
                 Task { @MainActor in self?.exportProgress = p }
             }

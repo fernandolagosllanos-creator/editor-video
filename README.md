@@ -14,11 +14,17 @@ compila para **macOS 14+** y **iOS 17+** (iPhone y iPad).
 | Texto | **Texto** → escribe, elige tamaño, color, momento y duración. Arrastra el texto sobre la vista previa para ubicarlo. |
 | Audio | **Audio** → silenciar o bajar el audio original, agregar música o voz desde un archivo, ajustar volumen y punto de inicio. |
 | Transiciones | Selecciona un clip → **Transición** → fundido cruzado, fundido a negro, deslizar, zoom o barrido, con duración ajustable. |
-| Efectos / filtros | **Filtro** → blanco y negro, noir, sepia, vívido, cálido, frío, desvanecido, chrome, instantánea. |
+| Color | Selecciona un clip → **Color** → 13 filtros con miniaturas de tu propio video (vívido, cálido, frío, cine, dorado, dramático, vintage, desvanecido, chrome, instantánea, blanco y negro, noir, sepia) con intensidad, y ajustes de brillo, contraste, saturación, temperatura, viñeta y nitidez. Mantén pulsado "comparar" para ver el original. Se puede aplicar a todos los clips. |
+| Velocidad | **Velocidad** → de 0.25× (cámara lenta) a 4× (acelerado), sin cambiar el tono de la voz. Incluye **Reversa** (el clip se reproduce al revés, sin sonido). |
+| Congelar fotograma | Coloca el cabezal y pulsa **Congelar** (o desde Velocidad, eligiendo 1, 2, 3 o 5 s): la imagen se detiene en ese cuadro. |
+| Stickers | **Stickers** → emojis y formas (corazón, estrella, flecha, globo, rayo…) con color y animación (aparecer, rebote, latido, balanceo, girar, flotar). Arrástralos sobre la vista previa; en iPhone pellizca para cambiar el tamaño y gira con dos dedos. Doble toque para editarlos. |
+| Formato | **Formato** → relación de aspecto 9:16, 1:1, 4:5, 16:9, 4:3 u original; encuadre del clip (ajustar o llenar, zoom, mover, espejo) y fondo desenfocado o de color. |
 | Exportar | **Exportar** → formato **MP4 o MOV**, códec **H.264 o HEVC (H.265)**, resolución **original / 480p / 720p / 1080p / 4K** y calidad **alta / media / baja**. En iPhone se guarda en Fotos; en Mac con "Guardar como…". En ambos se puede **Compartir**. |
 
-La vista previa reproduce exactamente lo que se va a exportar (transiciones, filtro y mezcla de
-audio incluidos). Los textos se muestran sobre la vista previa y se "queman" en el video al exportar.
+La vista previa reproduce exactamente lo que se va a exportar (transiciones, color, velocidad,
+formato y mezcla de audio incluidos). Los textos y stickers se muestran sobre la vista previa y se
+"queman" en el video al exportar. Todo usa solo frameworks de Apple incluidos en el sistema: nada
+es de pago.
 
 ## Cómo compilar y ejecutar
 
