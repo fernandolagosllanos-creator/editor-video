@@ -43,6 +43,7 @@ struct FXSheet<Content: View, Footer: View>: View {
                 VStack(alignment: .leading, spacing: 18) {
                     content()
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 18)
                 .padding(.bottom, 18)
             }
@@ -615,27 +616,31 @@ struct SpeedSheet: View {
         let frames = clip.thumbnails
         let count = max(1, frames.count)
         let loop = cell * CGFloat(count)
-        return SwiftUI.TimelineView(.animation) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let travel = CGFloat((t * 40 * speed).truncatingRemainder(dividingBy: Double(loop)))
-            let offset = reversed ? travel - loop : -travel
-            HStack(spacing: 0) {
-                ForEach(0..<(count * 3), id: \.self) { i in
-                    Group {
-                        if frames.isEmpty {
-                            FXPalette.surfaceRaised
-                        } else {
-                            Image(decorative: frames[i % count], scale: 1).resizable().aspectRatio(contentMode: .fill)
+        // La tira es más ancha que la hoja: va en un overlay para que no ensanche la ventana.
+        return Color.clear.overlay(alignment: .leading) {
+            SwiftUI.TimelineView(.animation) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                let travel = CGFloat((t * 40 * speed).truncatingRemainder(dividingBy: Double(loop)))
+                let offset = reversed ? travel - loop : -travel
+                HStack(spacing: 0) {
+                    ForEach(0..<(count * 3), id: \.self) { i in
+                        Group {
+                            if frames.isEmpty {
+                                FXPalette.surfaceRaised
+                            } else {
+                                Image(decorative: frames[i % count], scale: 1).resizable().aspectRatio(contentMode: .fill)
+                            }
                         }
+                        .frame(width: cell, height: 70)
+                        .clipped()
+                        .overlay(Rectangle().stroke(Color.black.opacity(0.6), lineWidth: 1))
                     }
-                    .frame(width: cell, height: 70)
-                    .clipped()
-                    .overlay(Rectangle().stroke(Color.black.opacity(0.6), lineWidth: 1))
                 }
+                .fixedSize()
+                .offset(x: offset)
             }
-            .offset(x: offset)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity)
         .frame(height: 70)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(FXPalette.stroke))
